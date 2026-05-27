@@ -1,10 +1,9 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import reposJson from '../data/repos.json';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SNAPSHOT_PATH = join(__dirname, '..', 'data', 'snapshots.jsonl');
+// Resolved from project root: stable across dev + SSG build.
+const SNAPSHOT_PATH = join(process.cwd(), 'src/data/snapshots.jsonl');
 
 export type RegistryRef =
   | { kind: 'crates'; name: string; entryKind?: 'library' | 'binary' }
