@@ -1,0 +1,30 @@
+---
+interface Props {
+  status: 'op' | 'deg' | 'down' | 'unknown';
+}
+const { status } = Astro.props;
+
+const map = {
+  op:      { label: 'fair winds',  cls: 'op' },
+  deg:     { label: 'choppy seas', cls: 'deg' },
+  down:    { label: 'aground',     cls: 'down' },
+  unknown: { label: 'no signal',   cls: 'unknown' },
+};
+const { label, cls } = map[status];
+---
+
+<span class={`dot dot-${cls}`} aria-label={label} title={label}></span>
+
+<style>
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.dot-op { background: var(--ok); }
+.dot-deg { background: var(--warn); }
+.dot-down { background: var(--bad); }
+.dot-unknown { background: transparent; border: 1px solid var(--mute); }
+</style>

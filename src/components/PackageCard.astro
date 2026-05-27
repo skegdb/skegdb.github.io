@@ -1,0 +1,257 @@
+---
+import type { Package, Snapshot } from '~/lib/data';
+import { healthStatus, formatRelTime } from '~/lib/data';
+import Sparkline from './Sparkline.astro';
+import StatusDot from './StatusDot.astro';
+
+interface Props {
+  pkg: Package;
+  snap?: Snapshot;
+}
+
+const { pkg, snap } = Astro.props;
+const status = healthStatus(snap);
+
+const release = snap?.github?.latest_release;
+const runs = snap?.github?.runs ?? [];
+
+const crateVersion = snap?.registries?.crates?.[0]?.max_version;
+const pypiVersion = snap?.registries?.pypi?.[0]?.version;
+const brewVersion = snap?.registries?.brew?.version;
+
+const versionPills: { label: string; value: string }[] = [];
+if (crateVersion) versionPills.push({ label: 'crates', value: crateVersion });
+if (pypiVersion) versionPills.push({ label: 'pypi', value: pypiVersion });
+if (brewVersion) versionPills.push({ label: 'brew', value: brewVersion });
+
+// Extract platform label from binary asset name
+function platformLabel(name: string): string {
+  if (name.includes('aarch64-apple-darwin')) return 'macOS · arm64';
+  if (name.includes('x86_64-apple-darwin')) return 'macOS · x86_64';
+  if (name.includes('aarch64-unknown-linux')) return 'Linux · arm64';
+  if (name.includes('x86_64-unknown-linux')) return 'Linux · x86_64';
+  if (name.includes('aarch64-pc-windows')) return 'Windows · arm64';
+  if (name.includes('x86_64-pc-windows')) return 'Windows · x86_64';
+  return name.replace(/^skeg-v[\d.]+-/, '').replace(/\.tar\.gz$/, '').replace(/\.zip$/, '');
+}
+
+const downloadable = (release?.assets ?? []).filter(
+  (a) => !a.name.endsWith('.sha256') && (a.name.endsWith('.tar.gz') || a.name.endsWith('.zip'))
+);
+---
+
+<article
+  class="card"
+  role="button"
+  tabindex="0"
+  data-pkg={pkg.id}
+  data-category={pkg.category}
+  aria-label={`Open details for ${pkg.name}`}
+>
+  <header>
+    <div class="title">
+      <StatusDot status={status} />
+      <span class="name">{pkg.name}</span>
+    </div>
+    <span class="category">{pkg.category}</span>
+  </header>
+
+  <p class="tagline">{pkg.tagline}</p>
+
+  <div class="meta">
+    {versionPills.map((p) => (
+      <span class="pill">
+        <span class="pill-k">{p.label}</span>
+        <span class="pill-v">{p.value}</span>
+      </span>
+    ))}
+    {!versionPills.length && <span class="pill-empty">unpublished</span>}
+  </div>
+
+  <div class="ci">
+    <Sparkline runs={runs} />
+    <span class="ci-meta">
+      {runs.length > 0
+        ? `${runs[0].conclusion ?? runs[0].status} · ${formatRelTime(runs[0].updated_at)}`
+        : 'no log'}
+    </span>
+  </div>
+
+  {downloadable.length > 0 && (
+    <div class="downloads">
+      <span class="downloads-label">download</span>
+      <div class="download-chips">
+        {downloadable.map((a) => (
+          <a
+            class="dl-chip"
+            href={a.download_url}
+            data-stop
+            title={a.name}
+            target="_blank"
+            rel="noopener"
+          >
+            {platformLabel(a.name)}
+          </a>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {release && (
+    <footer>
+      <span class="release-tag">{release.tag}</span>
+      <span class="release-time">{formatRelTime(release.published_at)}</span>
+    </footer>
+  )}
+</article>
+
+<style>
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-card);
+  cursor: pointer;
+  position: relative;
+  transition: background 120ms ease;
+  outline: none;
+}
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  pointer-events: none;
+  transition: border-color 120ms ease;
+}
+.card:hover, .card:focus-visible {
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--fg));
+}
+.card:hover::after, .card:focus-visible::after {
+  border-color: var(--fg);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.title { display: flex; align-items: center; gap: 10px; }
+.name {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+.category {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--mute);
+}
+.tagline {
+  margin: 0;
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--mute);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.meta { display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px; }
+.pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  display: inline-flex;
+  border: 1px solid var(--border);
+}
+.pill-k {
+  padding: 2px 6px;
+  background: var(--bg-pill);
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pill-v {
+  padding: 2px 8px;
+  color: var(--fg);
+  border-left: 1px solid var(--border);
+}
+.pill-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.ci { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ci-meta {
+  font-size: 10px;
+  color: var(--mute);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+.downloads-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--mute);
+}
+.download-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dl-chip {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border: 1px solid var(--fg);
+  background: var(--bg-card);
+  color: var(--fg);
+  text-decoration: none;
+  letter-spacing: 0;
+  transition: background 120ms ease, color 120ms ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dl-chip::before {
+  content: '↓';
+  font-size: 14px;
+  line-height: 1;
+}
+.dl-chip:hover {
+  background: var(--fg);
+  color: var(--bg-card);
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.release-tag { color: var(--fg); letter-spacing: 0.04em; }
+.release-time {
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+</style>

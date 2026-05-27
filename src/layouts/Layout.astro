@@ -1,0 +1,58 @@
+---
+import '~/styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+const {
+  title = 'skegdb · fleet status',
+  description = 'Status of the skegdb ecosystem: releases, packages, CI.',
+} = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <meta name="theme-color" content="#f6f3ec" id="meta-theme-color" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+  />
+  <script is:inline>
+    // Apply persisted theme before paint to avoid FOUC. Default = light.
+    (function () {
+      try {
+        var t = localStorage.getItem('skegdb-theme') || 'light';
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', t === 'dark' ? '#14130f' : '#f6f3ec');
+      } catch (_) {}
+    })();
+  </script>
+</head>
+<body>
+  <main>
+    <slot />
+  </main>
+  <script is:inline>
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('#theme-toggle');
+      if (!btn) return;
+      var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      var next = current === 'dark' ? 'light' : 'dark';
+      if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      else document.documentElement.removeAttribute('data-theme');
+      try { localStorage.setItem('skegdb-theme', next); } catch (_) {}
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', next === 'dark' ? '#14130f' : '#f6f3ec');
+    });
+  </script>
+</body>
+</html>

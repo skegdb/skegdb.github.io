@@ -1,0 +1,194 @@
+:root {
+  /* Light = default. Logo lives on white. */
+  --bg:         #f6f3ec;     /* parchment */
+  --bg-card:    #ffffff;
+  --bg-drawer:  #ffffff;
+  --bg-pill:    #ecebe5;
+  --bg-pill-k:  #ddd9cf;
+  --fg:         #1b1b1b;     /* ink */
+  --mute:       #6b665d;
+  --border:     #d6d1c4;
+  --rule:       #b9b2a0;
+  --accent:     #1b1b1b;     /* monochrome */
+
+  /* Functional colours: only for CI signal. Kept saturated, used sparingly. */
+  --ok:      #2f7a4d;
+  --warn:    #b87a1e;
+  --bad:     #b53939;
+  --running: #3a6db5;
+
+  --serif: 'Cormorant Garamond', 'Iowan Old Style', 'Hoefler Text', 'Apple Garamond', Georgia, serif;
+  --sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg:         #14130f;     /* deep ink */
+  --bg-card:    #1c1b16;
+  --bg-drawer:  #1a1915;
+  --bg-pill:    #25241e;
+  --bg-pill-k:  #2e2c25;
+  --fg:         #ece7d8;
+  --mute:       #8f897a;
+  --border:     #2e2c25;
+  --rule:       #3a3830;
+  --accent:     #ece7d8;
+
+  --ok:      #82b78f;
+  --warn:    #d7b072;
+  --bad:     #d68080;
+  --running: #84a8d2;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
+a:hover { color: var(--fg); border-bottom-color: var(--fg); }
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.hero {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 28px;
+  align-items: center;
+  padding: 48px 0 36px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 40px;
+}
+.hero-mark { grid-row: 1; }
+.hero-body {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hero-actions { grid-row: 1; align-self: start; padding-top: 4px; }
+.hero-eyebrow {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--mute);
+}
+.hero-sub {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: 22px;
+  max-width: 560px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.hero-stats {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 32px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.hero-stats .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.hero-stats .stat-num {
+  font-family: var(--sans);
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  line-height: 1;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.hero-stats .stat-num.ok { color: var(--ok); }
+.hero-stats .stat-num.warn { color: var(--warn); }
+.hero-stats .stat-num.bad { color: var(--bad); }
+
+.refresh-stat .refresh-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.refresh-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.refresh-meta .stat-last {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mute);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Grid of cards ────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+footer.site-footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--mute);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+footer.site-footer a { color: var(--mute); border-bottom-color: transparent; }
+footer.site-footer a:hover { color: var(--fg); border-bottom-color: var(--fg); }
+
+/* ── Section headings (uppercase tracking) ────────────── */
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--mute);
+}

@@ -1,0 +1,360 @@
+---
+import type { Package, Snapshot } from '~/lib/data';
+import { formatBytes, formatRelTime, shortSha } from '~/lib/data';
+
+interface Props {
+  pkg: Package;
+  snap?: Snapshot;
+}
+const { pkg, snap } = Astro.props;
+
+const release = snap?.github?.latest_release;
+const runs = snap?.github?.runs ?? [];
+const failedDetail = snap?.github?.last_failed_detail;
+---
+
+<dialog id={`drawer-${pkg.id}`} class="drawer" aria-labelledby={`drawer-title-${pkg.id}`}>
+  <form method="dialog" class="drawer-close-form">
+    <button class="drawer-close" aria-label="Close">×</button>
+  </form>
+
+  <header class="drawer-header">
+    <div>
+      <h2 id={`drawer-title-${pkg.id}`}>{pkg.name}</h2>
+      <p class="drawer-tagline">{pkg.tagline}</p>
+    </div>
+    <a class="repo-link" href={`https://github.com/${pkg.repo}`} target="_blank" rel="noopener">
+      github.com/{pkg.repo} ↗
+    </a>
+  </header>
+
+  <section>
+    <h3>Install</h3>
+    <ul class="install-list">
+      {pkg.install.map((i) => (
+        <li>
+          <span class="install-label">{i.label}</span>
+          <code class="install-cmd" data-copy={i.cmd}>{i.cmd}</code>
+          <button class="copy-btn" data-copy={i.cmd} aria-label="Copy command">copy</button>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  {release && (
+    <section>
+      <h3>
+        Latest release
+        <a class="release-link" href={release.html_url} target="_blank" rel="noopener">{release.tag}</a>
+        <span class="muted">{formatRelTime(release.published_at)}</span>
+      </h3>
+      {release.assets.length > 0 && (
+        <ul class="asset-list">
+          {release.assets.map((a) => (
+            <li>
+              <div class="asset-name">
+                <a href={a.download_url}>{a.name}</a>
+                <span class="muted">{formatBytes(a.size)}</span>
+              </div>
+              {a.sha256 && (
+                <div class="asset-sha">
+                  <span class="sha-label">sha256</span>
+                  <code class="sha-value" data-copy={a.sha256}>{a.sha256}</code>
+                  <button class="copy-btn" data-copy={a.sha256} aria-label="Copy sha256">copy</button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )}
+
+  {snap?.registries?.crates?.length ? (
+    <section>
+      <h3>Crates</h3>
+      <ul class="reg-list">
+        {snap.registries.crates.map((c) => (
+          <li>
+            <a href={`https://crates.io/crates/${c.name}`} target="_blank" rel="noopener">
+              {c.name}
+            </a>
+            <span class="version">{c.max_version}</span>
+            <span class="muted">{c.recent_downloads?.toLocaleString() ?? 0} dl/90d</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null}
+
+  {snap?.registries?.pypi?.length ? (
+    <section>
+      <h3>PyPI</h3>
+      <ul class="reg-list">
+        {snap.registries.pypi.map((p) => (
+          <li>
+            <a href={`https://pypi.org/project/${p.name}/`} target="_blank" rel="noopener">
+              {p.name}
+            </a>
+            <span class="version">{p.version}</span>
+            {p.requires_python && <span class="muted">python {p.requires_python}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null}
+
+  {snap?.registries?.brew?.version && (
+    <section>
+      <h3>Homebrew</h3>
+      <ul class="reg-list">
+        <li>
+          <a href={`https://github.com/${snap.registries.brew.tap.split('/')[0]}/homebrew-${snap.registries.brew.tap.split('/')[1]}`} target="_blank" rel="noopener">
+            {snap.registries.brew.tap}/{snap.registries.brew.formula}
+          </a>
+          <span class="version">{snap.registries.brew.version}</span>
+        </li>
+      </ul>
+    </section>
+  )}
+
+  <section>
+    <h3>CI history</h3>
+    <ul class="run-list">
+      {runs.slice(0, 12).map((r) => (
+        <li class={`run run-${r.conclusion ?? 'running'}`}>
+          <span class="run-mark">
+            {r.conclusion === 'success' ? '✓' : r.conclusion === 'failure' ? '✗' : r.conclusion === 'cancelled' ? '–' : '·'}
+          </span>
+          <a href={r.html_url} target="_blank" rel="noopener" class="run-title">
+            {r.workflow ? r.workflow.replace(/\.ya?ml$/, '') : r.name}
+            <span class="run-num">#{r.run_number}</span>
+          </a>
+          <span class="run-sha">{shortSha(r.head_sha)}</span>
+          <span class="run-msg">{r.head_commit_message}</span>
+          <span class="run-time">{formatRelTime(r.updated_at)}</span>
+        </li>
+      ))}
+    </ul>
+
+    {failedDetail?.jobs?.length ? (
+      <div class="failed-detail">
+        <strong>Last failure detail</strong>
+        <ul>
+          {failedDetail.jobs.map((j) => (
+            <li>
+              <a href={j.html_url} target="_blank" rel="noopener">{j.name}</a>
+              {j.first_failed_step && (
+                <>
+                  <span class="muted"> · step </span>
+                  <code>{j.first_failed_step}</code>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null}
+  </section>
+</dialog>
+
+<style>
+.drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(640px, 100vw);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--bg-drawer);
+  color: var(--fg);
+  overflow-y: auto;
+  box-shadow: -20px 0 60px -20px rgba(0,0,0,0.4);
+}
+.drawer::backdrop {
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
+}
+.drawer[open] {
+  animation: slide-in 200ms ease;
+}
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.drawer-close-form { position: sticky; top: 0; z-index: 2; }
+.drawer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.drawer-close:hover { background: var(--bg-pill); }
+.drawer-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-header h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.02em; }
+.drawer-tagline { margin: 0 0 12px; color: var(--mute); font-size: 14px; }
+.repo-link { color: var(--mute); font-size: 12px; font-family: var(--mono); text-decoration: none; }
+.repo-link:hover { color: var(--accent); }
+.drawer section {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer section:last-child { border-bottom: none; }
+.drawer h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mute);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.drawer h3 .release-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: var(--mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.muted { color: var(--mute); font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.install-list, .asset-list, .reg-list, .run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.install-list li {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.install-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.install-cmd {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 6px 10px;
+  background: var(--bg-pill);
+  border-radius: 6px;
+  user-select: all;
+}
+.copy-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--mute);
+  cursor: pointer;
+}
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+
+.asset-list li {
+  padding: 8px 10px;
+  background: var(--bg-pill);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.asset-name {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.asset-name a { color: var(--fg); text-decoration: none; }
+.asset-name a:hover { color: var(--accent); }
+.asset-sha { display: flex; gap: 8px; align-items: center; }
+.sha-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mute);
+}
+.sha-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.reg-list li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.reg-list a { color: var(--fg); text-decoration: none; }
+.reg-list a:hover { color: var(--accent); }
+.version {
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.run-list { font-size: 12px; font-family: var(--mono); }
+.run {
+  display: grid;
+  grid-template-columns: 16px auto 60px 1fr auto;
+  gap: 8px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+.run-mark { font-weight: bold; }
+.run-success .run-mark { color: var(--ok); }
+.run-failure .run-mark { color: var(--bad); }
+.run-cancelled .run-mark { color: var(--mute); }
+.run-title { color: var(--fg); text-decoration: none; }
+.run-title:hover { color: var(--accent); }
+.run-num { color: var(--mute); margin-left: 4px; }
+.run-sha { color: var(--mute); }
+.run-msg {
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-time { color: var(--mute); font-size: 11px; }
+
+.failed-detail {
+  margin-top: 16px;
+  padding: 12px;
+  border-left: 3px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.failed-detail strong { display: block; margin-bottom: 6px; color: var(--bad); }
+.failed-detail ul { list-style: none; padding: 0; margin: 0; }
+.failed-detail code { font-family: var(--mono); padding: 1px 6px; background: var(--bg-pill); border-radius: 3px; }
+</style>

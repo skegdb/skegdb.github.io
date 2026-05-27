@@ -1,0 +1,42 @@
+name: Snapshot
+
+on:
+  schedule:
+    - cron: '17 * * * *'  # hourly at minute 17 (avoid the rush)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/snapshot.mjs
+
+      - name: Commit if changed
+        run: |
+          git config user.name "skegdb-bot"
+          git config user.email "skegdb-bot@users.noreply.github.com"
+          if git diff --quiet src/data/snapshots.jsonl; then
+            echo "no changes"
+            exit 0
+          fi
+          git add src/data/snapshots.jsonl
+          git commit -m "data: snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push

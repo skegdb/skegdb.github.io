@@ -1,0 +1,49 @@
+---
+import type { Run } from '~/lib/data';
+
+interface Props {
+  runs: Run[];
+  width?: number;
+  height?: number;
+}
+
+const { runs, width = 180, height = 22 } = Astro.props;
+
+// Oldest → newest, left to right. GitHub returns newest first.
+const ordered = [...runs].reverse();
+const max = ordered.length;
+const stride = max > 0 ? width / max : 0;
+const barW = Math.max(2, stride - 2);
+
+function color(c: string | null) {
+  if (c === 'success') return 'var(--ok)';
+  if (c === 'failure') return 'var(--bad)';
+  if (c === 'cancelled') return 'var(--mute)';
+  if (c === null) return 'var(--running)';
+  return 'var(--warn)';
+}
+---
+
+<svg
+  viewBox={`0 0 ${width} ${height}`}
+  width={width}
+  height={height}
+  role="img"
+  aria-label={`${ordered.length} recent runs`}
+  preserveAspectRatio="none"
+>
+  {ordered.length === 0 && (
+    <text x={width / 2} y={height / 2 + 4} text-anchor="middle" fill="var(--mute)" font-size="9" font-family="var(--mono)">·····</text>
+  )}
+  {ordered.map((r, i) => (
+    <rect
+      x={i * stride + 1}
+      y={2}
+      width={barW}
+      height={height - 4}
+      fill={color(r.conclusion)}
+    >
+      <title>{`#${r.run_number} ${r.workflow || r.name}: ${r.conclusion ?? r.status}`}</title>
+    </rect>
+  ))}
+</svg>

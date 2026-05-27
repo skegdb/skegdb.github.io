@@ -1,0 +1,52 @@
+---
+---
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+  <span class="theme-icon theme-icon-light" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <line x1="12" y1="2"  x2="12" y2="5"  />
+      <line x1="12" y1="19" x2="12" y2="22" />
+      <line x1="2"  y1="12" x2="5"  y2="12" />
+      <line x1="19" y1="12" x2="22" y2="12" />
+      <line x1="4.5"  y1="4.5"  x2="6.5"  y2="6.5" />
+      <line x1="17.5" y1="17.5" x2="19.5" y2="19.5" />
+      <line x1="4.5"  y1="19.5" x2="6.5"  y2="17.5" />
+      <line x1="17.5" y1="6.5"  x2="19.5" y2="4.5" />
+    </svg>
+  </span>
+  <span class="theme-icon theme-icon-dark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 13.5A9 9 0 1 1 10.5 3a7 7 0 0 0 10.5 10.5Z" />
+    </svg>
+  </span>
+</button>
+
+<style>
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--fg);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+  position: relative;
+}
+.theme-toggle:hover {
+  border-color: var(--fg);
+}
+.theme-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.theme-icon-light { opacity: 1; transform: rotate(0); }
+.theme-icon-dark  { opacity: 0; transform: rotate(-45deg); }
+:root[data-theme='dark'] .theme-icon-light { opacity: 0; transform: rotate(45deg); }
+:root[data-theme='dark'] .theme-icon-dark  { opacity: 1; transform: rotate(0); }
+</style>

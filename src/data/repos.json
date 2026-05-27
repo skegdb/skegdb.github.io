@@ -1,0 +1,112 @@
+{
+  "$schema": "./repos.schema.json",
+  "packages": [
+    {
+      "id": "skeg",
+      "name": "skeg",
+      "repo": "skegdb/skeg",
+      "tagline": "KV+vector store, SSD-primary, RAM-frugal. Runs anywhere your model runs.",
+      "category": "engine",
+      "registries": {
+        "crates": [
+          { "name": "skeg-core", "kind": "library" },
+          { "name": "skeg-proto", "kind": "library" },
+          { "name": "skeg-platform", "kind": "library" },
+          { "name": "skeg-simd", "kind": "library" },
+          { "name": "skeg-vector", "kind": "library" },
+          { "name": "skeg-resp3", "kind": "library" }
+        ],
+        "brew": { "tap": "skegdb/tap", "formula": "skeg" }
+      },
+      "install": [
+        { "label": "brew",  "cmd": "brew install skegdb/tap/skeg" },
+        { "label": "cargo", "cmd": "cargo add skeg-core" }
+      ],
+      "primaryRegistry": "brew"
+    },
+    {
+      "id": "skeg-py",
+      "name": "skeg-py",
+      "repo": "skegdb/skeg-py",
+      "tagline": "Python client for skeg. PyO3 wheels, async + sync.",
+      "category": "client",
+      "registries": {
+        "pypi": [ { "name": "skeg" } ]
+      },
+      "install": [
+        { "label": "pip", "cmd": "pip install skeg" }
+      ],
+      "primaryRegistry": "pypi"
+    },
+    {
+      "id": "skeg-client-rs",
+      "name": "skeg-client-rs",
+      "repo": "skegdb/skeg-client-rs",
+      "tagline": "Rust client SDK for skeg.",
+      "category": "client",
+      "registries": {
+        "crates": [ { "name": "skeg-client", "kind": "library" } ]
+      },
+      "install": [
+        { "label": "cargo", "cmd": "cargo add skeg-client" }
+      ],
+      "primaryRegistry": "crates"
+    },
+    {
+      "id": "skeg-cli",
+      "name": "skeg-cli",
+      "repo": "skegdb/skeg-cli",
+      "tagline": "Offline index build, data-dir inspect, server stats.",
+      "category": "tool",
+      "registries": {
+        "crates": [ { "name": "skeg-cli", "kind": "binary" } ]
+      },
+      "install": [
+        { "label": "cargo", "cmd": "cargo install skeg-cli" }
+      ],
+      "primaryRegistry": "crates"
+    },
+    {
+      "id": "skeg-ollama",
+      "name": "skeg-ollama",
+      "repo": "skegdb/skeg-ollama",
+      "tagline": "Ollama embedding + retrieval, two helpers, no framework.",
+      "category": "adapter",
+      "registries": {
+        "pypi": [ { "name": "skeg-ollama" } ]
+      },
+      "install": [
+        { "label": "pip", "cmd": "pip install skeg-ollama" }
+      ],
+      "primaryRegistry": "pypi"
+    },
+    {
+      "id": "skeg-llamaindex",
+      "name": "skeg-llamaindex",
+      "repo": "skegdb/skeg-llamaindex",
+      "tagline": "LlamaIndex VectorStore backed by skeg.",
+      "category": "adapter",
+      "registries": {
+        "pypi": [ { "name": "skeg-llamaindex" } ]
+      },
+      "install": [
+        { "label": "pip", "cmd": "pip install skeg-llamaindex" }
+      ],
+      "primaryRegistry": "pypi"
+    },
+    {
+      "id": "homebrew-tap",
+      "name": "homebrew-tap",
+      "repo": "skegdb/homebrew-tap",
+      "tagline": "Homebrew tap hosting skeg formulae.",
+      "category": "infra",
+      "registries": {
+        "brew": { "tap": "skegdb/tap", "formula": "skeg" }
+      },
+      "install": [
+        { "label": "tap", "cmd": "brew tap skegdb/tap" }
+      ],
+      "primaryRegistry": "brew"
+    }
+  ]
+}

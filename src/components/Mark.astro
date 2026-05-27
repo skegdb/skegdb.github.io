@@ -1,0 +1,28 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 140 } = Astro.props;
+---
+<div class="mark" style={`--mark-size: ${size}px;`}>
+  <img src="/skeg-logo.png" alt="skeg" width={size} height={size} />
+</div>
+
+<style>
+.mark {
+  width: var(--mark-size);
+  height: var(--mark-size);
+  background: #ffffff;
+  border-radius: 4px;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+.mark img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+</style>

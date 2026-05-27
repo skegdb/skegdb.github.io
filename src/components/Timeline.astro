@@ -1,0 +1,101 @@
+---
+import type { Snapshot } from '~/lib/data';
+import { formatRelTime } from '~/lib/data';
+
+interface Props {
+  snapshots: Snapshot[];
+  limit?: number;
+}
+const { snapshots, limit = 8 } = Astro.props;
+
+type Event = {
+  ts: string;
+  id: string;
+  text: string;
+  href: string;
+  kind: 'release' | 'crate' | 'pypi' | 'fail';
+};
+
+const events: Event[] = [];
+
+for (const snap of snapshots) {
+  const release = snap.github?.latest_release;
+  if (release) {
+    events.push({
+      ts: release.published_at,
+      id: snap.id,
+      text: `${snap.id} ${release.tag} released`,
+      href: release.html_url,
+      kind: 'release',
+    });
+  }
+  const lastRun = snap.github?.runs?.find((r) => r.status === 'completed');
+  if (lastRun?.conclusion === 'failure') {
+    events.push({
+      ts: lastRun.updated_at,
+      id: snap.id,
+      text: `${snap.id} CI failure on ${lastRun.workflow?.replace(/\.ya?ml$/, '') || lastRun.name}`,
+      href: lastRun.html_url,
+      kind: 'fail',
+    });
+  }
+}
+
+events.sort((a, b) => (b.ts > a.ts ? 1 : -1));
+const recent = events.slice(0, limit);
+---
+
+{recent.length > 0 && (
+  <div class="timeline">
+    <h3>Recent activity</h3>
+    <ul>
+      {recent.map((e) => (
+        <li class={`tl-${e.kind}`}>
+          <span class="tl-time">{formatRelTime(e.ts)}</span>
+          <a href={e.href} target="_blank" rel="noopener" class="tl-text">{e.text}</a>
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
+
+<style>
+.timeline {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.timeline h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mute);
+}
+.timeline ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.tl-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mute);
+}
+.tl-text { color: var(--fg); text-decoration: none; }
+.tl-text:hover { color: var(--accent); }
+.tl-release .tl-text { border-left: 3px solid var(--accent); padding-left: 8px; }
+.tl-fail .tl-text { border-left: 3px solid var(--bad); padding-left: 8px; }
+</style>

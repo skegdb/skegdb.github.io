@@ -1,0 +1,193 @@
+---
+import Layout from '~/layouts/Layout.astro';
+import PackageCard from '~/components/PackageCard.astro';
+import Drawer from '~/components/Drawer.astro';
+import Timeline from '~/components/Timeline.astro';
+import Mark from '~/components/Mark.astro';
+import ThemeToggle from '~/components/ThemeToggle.astro';
+import { getPackages, getLatestSnapshots, healthStatus } from '~/lib/data';
+
+const packages = getPackages();
+const latest = getLatestSnapshots();
+const snapshotList = packages.map((p) => latest.get(p.id)).filter(Boolean) as any[];
+
+const buckets = { op: 0, deg: 0, down: 0, unknown: 0 };
+for (const pkg of packages) {
+  buckets[healthStatus(latest.get(pkg.id))]++;
+}
+const lastTs = snapshotList[0]?.ts;
+
+// Snapshot cron fires at minute 17 each hour. Surface it for the countdown.
+const SNAPSHOT_MINUTE = 17;
+---
+<Layout>
+  <section class="hero">
+    <div class="hero-mark"><Mark size={148} /></div>
+
+    <div class="hero-body">
+      <p class="hero-eyebrow">fleet status</p>
+      <p class="hero-sub">Releases, packages, and CI signal for every vessel in the skegdb ecosystem.</p>
+    </div>
+
+    <div class="hero-actions"><ThemeToggle /></div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <span class="stat-num ok">{buckets.op}</span>
+        <span class="stat-meta">at sea</span>
+      </div>
+      {buckets.deg > 0 && (
+        <div class="stat">
+          <span class="stat-num warn">{buckets.deg}</span>
+          <span class="stat-meta">choppy</span>
+        </div>
+      )}
+      {buckets.down > 0 && (
+        <div class="stat">
+          <span class="stat-num bad">{buckets.down}</span>
+          <span class="stat-meta">aground</span>
+        </div>
+      )}
+      {buckets.unknown > 0 && (
+        <div class="stat">
+          <span class="stat-num">{buckets.unknown}</span>
+          <span class="stat-meta">silent</span>
+        </div>
+      )}
+      <div class="stat">
+        <span class="stat-num">{packages.length}</span>
+        <span class="stat-meta">vessels</span>
+      </div>
+
+      <div class="stat refresh-stat" data-snapshot-min={SNAPSHOT_MINUTE} style="margin-left: auto; align-items: flex-end;">
+        <span class="stat-num refresh-num" id="next-refresh-display">--:--</span>
+        <div class="refresh-meta">
+          <span class="stat-meta">next refresh</span>
+          {lastTs && (
+            <span class="stat-last" data-last-ts={lastTs} id="last-sighting-display">
+              last {new Date(lastTs).toISOString().replace('T', ' ').slice(0, 16)} UTC
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <Timeline snapshots={snapshotList} />
+
+  <section class="grid">
+    {packages.map((pkg) => (
+      <PackageCard pkg={pkg} snap={latest.get(pkg.id)} />
+    ))}
+  </section>
+
+  {packages.map((pkg) => (
+    <Drawer pkg={pkg} snap={latest.get(pkg.id)} />
+  ))}
+
+  <footer class="site-footer">
+    <div>
+      <a href="https://github.com/skegdb">github.com/skegdb</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/skegdb/skegdb.github.io">source</a>
+    </div>
+    <div>charted hourly · static, no trackers</div>
+  </footer>
+
+  <script is:inline>
+    function openDrawer(id) {
+      const dlg = document.getElementById(`drawer-${id}`);
+      if (dlg && typeof dlg.showModal === 'function') {
+        dlg.showModal();
+        history.replaceState(null, '', `#${id}`);
+      }
+    }
+    document.addEventListener('click', (e) => {
+      // Let download chips & explicit no-bubble elements pass through.
+      if (e.target.closest('[data-stop]')) return;
+
+      const card = e.target.closest('.card[data-pkg]');
+      if (card) {
+        e.preventDefault();
+        openDrawer(card.dataset.pkg);
+        return;
+      }
+      const copyBtn = e.target.closest('[data-copy]');
+      if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = copyBtn.dataset.copy;
+        navigator.clipboard?.writeText(text);
+        copyBtn.classList.add('copied');
+        const prev = copyBtn.textContent;
+        if (copyBtn.tagName === 'BUTTON') {
+          copyBtn.textContent = 'copied';
+          setTimeout(() => {
+            copyBtn.textContent = prev;
+            copyBtn.classList.remove('copied');
+          }, 1200);
+        } else {
+          setTimeout(() => copyBtn.classList.remove('copied'), 1200);
+        }
+      }
+    });
+
+    document.querySelectorAll('dialog.drawer').forEach((dlg) => {
+      dlg.addEventListener('click', (e) => {
+        if (e.target === dlg) dlg.close();
+      });
+      dlg.addEventListener('close', () => {
+        if (location.hash) history.replaceState(null, '', location.pathname);
+      });
+    });
+
+    // Keyboard support for cards (role=button).
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const card = e.target.closest?.('.card[data-pkg]');
+      if (card) {
+        e.preventDefault();
+        openDrawer(card.dataset.pkg);
+      }
+    });
+
+    if (location.hash) {
+      const id = location.hash.slice(1);
+      openDrawer(id);
+    }
+
+    // Live countdown to next snapshot. Cron at minute :17 of each hour.
+    const refreshEl = document.getElementById('next-refresh-display');
+    const snapshotMin = parseInt(
+      document.querySelector('.refresh-stat')?.dataset.snapshotMin || '17', 10
+    );
+    function fmtCountdown() {
+      if (!refreshEl) return;
+      const now = new Date();
+      const next = new Date(now);
+      next.setSeconds(0, 0);
+      next.setMinutes(snapshotMin);
+      if (next <= now) next.setHours(next.getHours() + 1);
+      const diff = Math.floor((next - now) / 1000);
+      const m = Math.floor(diff / 60);
+      const s = diff % 60;
+      refreshEl.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    fmtCountdown();
+    setInterval(fmtCountdown, 1000);
+
+    // Auto-reload when countdown elapses + grace period (give the workflow ~3min to commit).
+    function scheduleAutoReload() {
+      const now = new Date();
+      const next = new Date(now);
+      next.setSeconds(0, 0);
+      next.setMinutes(snapshotMin);
+      if (next <= now) next.setHours(next.getHours() + 1);
+      const ms = (next - now) + 3 * 60 * 1000;
+      setTimeout(() => {
+        location.reload();
+      }, ms);
+    }
+    scheduleAutoReload();
+  </script>
+</Layout>
