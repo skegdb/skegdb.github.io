@@ -499,17 +499,19 @@ const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toStrin
       }
 
       var charts = {
-        recall:    chart('chart-recall',    function () { return recallOptions('recall@10',  'recall @ 10'); }),
-        recall100: chart('chart-recall100', function () { return recallOptions('recall@100', 'recall @ 100'); }),
-        rss:       chart('chart-rss',       rssOptions),
-        latency:   chart('chart-latency',   latencyOptions),
-        qps:       chart('chart-qps',       qpsOptions),
-        build:     chart('chart-build',     buildOptions),
+        recall:     chart('chart-recall',    function () { return recallOptions('recall@10',  'recall @ 10'); }),
+        recall100:  chart('chart-recall100', function () { return recallOptions('recall@100', 'recall @ 100'); }),
+        'disk-ram': chart('chart-disk-ram',  diskRamOptions),
+        rss:        chart('chart-rss',       rssOptions),
+        latency:    chart('chart-latency',   latencyOptions),
+        qps:        chart('chart-qps',       qpsOptions),
+        build:      chart('chart-build',     buildOptions),
       };
       function reRender() {
         Object.entries({
           'chart-recall':    function () { return recallOptions('recall@10',  'recall @ 10'); },
           'chart-recall100': function () { return recallOptions('recall@100', 'recall @ 100'); },
+          'chart-disk-ram':  diskRamOptions,
           'chart-rss':       rssOptions,
           'chart-latency':   latencyOptions,
           'chart-qps':       qpsOptions,
