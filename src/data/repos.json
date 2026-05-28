@@ -19,8 +19,9 @@
         "brew": { "tap": "skegdb/tap", "formula": "skeg" }
       },
       "install": [
-        { "label": "brew",  "cmd": "brew install skegdb/tap/skeg" },
-        { "label": "cargo", "cmd": "cargo add skeg-core" }
+        { "label": "brew",   "cmd": "brew install skegdb/tap/skeg" },
+        { "label": "docker", "cmd": "docker run -d -p 7379:7379 -v skeg:/var/lib/skeg ghcr.io/skegdb/skeg:latest" },
+        { "label": "cargo",  "cmd": "cargo add skeg-core" }
       ],
       "primaryRegistry": "brew"
     },

@@ -1,0 +1,368 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import MachineContext from '~/components/MachineContext.astro';
+import DataProvenance from '~/components/DataProvenance.astro';
+import sliceC from '~/data/bench/slice-c.json';
+
+const cells = (sliceC.cells || []) as any[];
+const engines = (sliceC.engines || []) as string[];
+
+const enginePalette: Record<string, string> = {
+  'skeg-int8':    '#1b1b1b',
+  'skeg-pq128':   '#2c6e9b',
+  'qdrant-hnsw':  '#7a5cd4',
+  'qdrant-pq':    '#a48bfb',
+  'qdrant-sq':    '#5c4096',
+  'chroma-hnsw':  '#d4845c',
+};
+const enginePaletteDark: Record<string, string> = {
+  'skeg-int8':    '#ece7d8',
+  'skeg-pq128':   '#6fb3e3',
+  'qdrant-hnsw':  '#a48bfb',
+  'qdrant-pq':    '#c6b4ff',
+  'qdrant-sq':    '#826ec0',
+  'chroma-hnsw':  '#f4a87c',
+};
+
+const fmt = (v: any, d = 1) => (v == null || (typeof v === 'number' && isNaN(v))) ? '-' : (typeof v === 'number' ? v.toFixed(d) : String(v));
+const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toString();
+---
+<BenchLayout title="slice C · multi-tenant · skegdb benchmarks"
+             description="per-tenant isolation in a single skeg process"
+             slice="c">
+
+  <header class="bench-hero">
+    <p class="hero-eyebrow">slice C · concurrency under load</p>
+    <h1>does the engine scale with concurrent clients?</h1>
+    <p class="hero-sub">
+      Same scale as slice A's smallest point (N = 100K), same effort knob,
+      now with a sweep of <strong>1 / 4 / 16 / 64 concurrent clients</strong>.
+      Where does throughput saturate? How does p99 latency degrade as the
+      queue depth grows? Each engine is single-process here; this is the
+      single-machine ceiling, not a cluster benchmark.
+    </p>
+  </header>
+
+  <BenchInsight kind="finding">
+    <p>
+      <strong>skeg saturates at concurrency = 4</strong>: pq128 plateaus at
+      ~640 QPS, int8 at ~644 QPS, then stays flat all the way to 64 clients.
+      The shard is single-threaded; queueing kicks in beyond 4 in-flight
+      requests and p99 latency grows linearly. Recall is unaffected · 0.999+
+      across all concurrency levels.
+    </p>
+    <p>
+      Qdrant-hnsw scales differently: 358 QPS at c=1, 623 QPS at c=4 (1.7×
+      ramp), comparable plateau. The takeaway: on a single machine, all
+      three engines top out around the same throughput. To go further you
+      need multi-process / multi-shard, not bigger boxes.
+    </p>
+  </BenchInsight>
+
+  <MachineContext snapshot="slice-abc" fallback="slice-a" />
+
+  <DataProvenance
+    corpus="simple-wiki"
+    embedder="mxbai"
+    groundTruth="exact-bruteforce"
+    queries="1 000 hold-out passages (same set as slice A), each issued concurrently by 1, 4, 16, or 64 simulated clients."
+  />
+
+  <BenchInsight kind="context">
+    <p>
+      Single scale (100K), 2 runs per (engine, concurrency), median tabulated.
+      For chroma at c=64 the first attempt hit "too many open files" · the
+      run was repeated with <code>ulimit -n 65536</code> and bench resume
+      mode.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>throughput as clients pile on</h2>
+      <p class="bench-section-text">
+        QPS as concurrency grows from 1 to 64. The plateau is the
+        single-machine ceiling for that engine · adding more clients past
+        that point only deepens the queue. Where each engine's line flattens
+        tells you how much concurrency the single shard can usefully absorb.
+      </p>
+    </div>
+    <div id="chart-qps" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>p99 latency under contention</h2>
+      <p class="bench-section-text">
+        Log scale. Past the saturation point above, p99 grows roughly
+        linearly with concurrency (more clients = longer queue). The
+        absolute number depends on protocol overhead; what matters is the
+        shape · a sharp inflection would mean contention on a shared
+        resource, not orderly queueing.
+      </p>
+    </div>
+    <div id="chart-latency" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>recall stays put</h2>
+      <p class="bench-section-text">
+        Recall@10 across concurrency levels. A flat line is the desired
+        outcome: throughput pressure should not bend the recall curve. All
+        engines deliver on this · the search algorithm is deterministic, the
+        only thing changing is how fast results come out.
+      </p>
+    </div>
+    <div id="chart-recall" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>all numbers</h2>
+      <p class="bench-section-text">Click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="data-table">
+        <thead>
+          <tr>
+            <th>engine</th>
+            <th>scale</th>
+            <th>knob</th>
+            <th>value</th>
+            <th>concurrency</th>
+            <th>recall@10</th>
+            <th>p50 µs</th>
+            <th>p99 µs</th>
+            <th>qps</th>
+            <th>rss MiB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cells.sort((a, b) => a.engine.localeCompare(b.engine) || (a.concurrency - b.concurrency) || (a.sweep_value ?? 0) - (b.sweep_value ?? 0)).map((r: any) => (
+            <tr>
+              <td><span class={`engine-dot engine-${r.engine}`}></span>{r.engine}</td>
+              <td>{r.scale}</td>
+              <td>{r.sweep_param}</td>
+              <td class="num">{fmt(r.sweep_value, 0)}</td>
+              <td class="num">{r.concurrency}</td>
+              <td class="num">{fmt(r['recall@10'], 4)}</td>
+              <td class="num">{fmtInt(r['p50_us'])}</td>
+              <td class="num">{fmtInt(r['p99_us'])}</td>
+              <td class="num">{fmtInt(r['qps'])}</td>
+              <td class="num">{fmt(r['rss_steady_mib'], 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-methodology">
+    <h2>methodology in one minute</h2>
+    <ul>
+      <li><strong>Scale</strong>: 100K vectors fixed, single corpus from <a href="/bench/slice-a/">slice A</a>.</li>
+      <li><strong>Concurrency</strong>: 1 / 4 / 16 / 64 simultaneous clients.</li>
+      <li><strong>Effort knob</strong>: each engine at its default for this scale (skeg <code>l_search=300</code>, qdrant <code>ef=128</code>, chroma <code>ef=128</code>).</li>
+      <li><strong>Repetitions</strong>: 2 per (engine, concurrency); median tabulated.</li>
+      <li><strong>Note</strong>: first run hit a file-descriptor limit on chroma at c=64. Re-run with <code>ulimit -n 65536</code> + resume mode in the harness.</li>
+    </ul>
+  </section>
+
+  <script is:inline id="bench-data" type="application/json" set:html={JSON.stringify({ cells, engines, palette: enginePalette, paletteDark: enginePaletteDark })} />
+
+  <script is:inline>
+    (function () {
+      var dataEl = document.getElementById('bench-data');
+      if (!dataEl || !window.echarts) return;
+      var data;
+      try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+      function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+      function colors() {
+        var dark = isDark();
+        return { fg: dark ? '#ece7d8' : '#1b1b1b', mute: dark ? '#8f897a' : '#6b665d',
+                 rule: dark ? '#3a3830' : '#d6d1c4', axis: dark ? '#3a3830' : '#b9b2a0',
+                 bg: dark ? '#1c1b16' : '#ffffff' };
+      }
+      function paletteFor(engine) {
+        return (isDark() ? data.paletteDark[engine] : data.palette[engine]) || '#999';
+      }
+      function baseOpts() {
+        var c = colors();
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700, animationEasing: 'cubicOut',
+          grid: { left: 70, right: 28, top: 24, bottom: 60, containLabel: true },
+          legend: {
+            bottom: 0,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            trigger: 'axis',
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            padding: [8, 12], extraCssText: 'box-shadow: 0 4px 24px rgba(0,0,0,0.18); border-radius: 0;',
+          },
+        };
+      }
+
+      function chart(id, build) {
+        var el = document.getElementById(id); if (!el) return null;
+        var inst = window.echarts.init(el, null, { renderer: 'svg' });
+        inst.setOption(build());
+        return inst;
+      }
+
+      function buildSeries(yKey) {
+        // Group by engine, x = concurrency, y = yKey.
+        // If multiple sweep_values exist for same (engine, concurrency), take median.
+        var groups = {};
+        data.cells.forEach(function (r) {
+          if (r[yKey] == null) return;
+          var key = r.engine + '|' + r.concurrency;
+          (groups[key] = groups[key] || []).push(r[yKey]);
+        });
+        var byEngine = {};
+        Object.keys(groups).forEach(function (k) {
+          var parts = k.split('|');
+          var engine = parts[0]; var conc = parseFloat(parts[1]);
+          var arr = groups[k].slice().sort(function(a, b){ return a - b; });
+          var med = arr[Math.floor(arr.length / 2)];
+          (byEngine[engine] = byEngine[engine] || []).push([conc, med]);
+        });
+        Object.keys(byEngine).forEach(function (k) {
+          byEngine[k].sort(function (a, b) { return a[0] - b[0]; });
+        });
+        return data.engines.map(function (engine) {
+          return {
+            name: engine, type: 'line', smooth: true,
+            symbol: 'circle', symbolSize: 9,
+            itemStyle: { color: paletteFor(engine) },
+            lineStyle: { color: paletteFor(engine), width: 2.5 },
+            emphasis: { focus: 'series', scale: 1.4 },
+            data: byEngine[engine] || [],
+          };
+        }).filter(function (s) { return s.data.length > 0; });
+      }
+
+      function commonXAxis() {
+        var c = colors();
+        return {
+          type: 'value',
+          name: 'concurrency', nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+      }
+
+      function qpsOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.xAxis = commonXAxis();
+        opts.yAxis = {
+          type: 'value',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'QPS', nameLocation: 'middle', nameGap: 55,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = buildSeries('qps');
+        return opts;
+      }
+
+      function recallOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.xAxis = commonXAxis();
+        opts.yAxis = {
+          type: 'value', min: 0.7, max: 1.0,
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v.toFixed(2); } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'recall @ 10', nameLocation: 'middle', nameGap: 50,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = buildSeries('recall@10');
+        return opts;
+      }
+
+      function latencyOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.xAxis = {
+          type: 'value',
+          name: 'concurrency', nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.yAxis = {
+          type: 'log',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1000 ? (v/1000) + ' ms' : v + ' µs'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'p99 · log', nameLocation: 'middle', nameGap: 55,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = buildSeries('p99_us');
+        return opts;
+      }
+
+      var charts = {
+        qps:     chart('chart-qps',     qpsOptions),
+        latency: chart('chart-latency', latencyOptions),
+        recall:  chart('chart-recall',  recallOptions),
+      };
+      function reRender() {
+        if (charts.qps)     charts.qps.setOption(qpsOptions(),         true);
+        if (charts.latency) charts.latency.setOption(latencyOptions(), true);
+        if (charts.recall)  charts.recall.setOption(recallOptions(),   true);
+      }
+      window.addEventListener('resize', function () {
+        Object.values(charts).forEach(function (c) { if (c) c.resize(); });
+      });
+      document.querySelectorAll('[data-chart]').forEach(function (el) {
+        el.addEventListener('skegdb-theme-changed', reRender);
+      });
+
+      function trySort(headerEl) {
+        var tbody = document.querySelector('#data-table tbody');
+        var headers = Array.from(document.querySelectorAll('#data-table th'));
+        var idx = headers.indexOf(headerEl);
+        var asc = headerEl.dataset.dir !== 'asc';
+        headers.forEach(function (h) { h.dataset.dir = ''; h.classList.remove('sorted', 'asc'); });
+        headerEl.dataset.dir = asc ? 'asc' : 'desc';
+        headerEl.classList.add('sorted', asc ? 'asc' : 'desc');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+          var aa = a.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var bb = b.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var an = parseFloat(aa), bn = parseFloat(bb);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      }
+      document.querySelectorAll('#data-table th').forEach(function (th) {
+        th.addEventListener('click', function () { trySort(th); });
+      });
+    })();
+  </script>
+
+  <style>
+    .bench-hero { margin-bottom: 32px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--mute); max-width: 720px; font-size: 15px; line-height: 1.55; }
+  </style>
+</BenchLayout>

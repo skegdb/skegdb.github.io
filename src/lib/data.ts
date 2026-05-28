@@ -147,7 +147,7 @@ export function healthStatus(snap?: Snapshot): 'op' | 'deg' | 'down' | 'unknown'
   if (!completed.length) return 'unknown';
   const last = completed[0];
   if (last.conclusion === 'success') return 'op';
-  // Check the last 10 — if mostly success, degraded; else down
+  // Check the last 10 · if mostly success, degraded; else down
   const window = completed.slice(0, 10);
   const greens = window.filter((r) => r.conclusion === 'success').length;
   if (greens >= window.length * 0.7) return 'deg';

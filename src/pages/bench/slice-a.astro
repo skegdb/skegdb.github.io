@@ -1,0 +1,562 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import MachineContext from '~/components/MachineContext.astro';
+import DataProvenance from '~/components/DataProvenance.astro';
+import sliceA from '~/data/bench/slice-a.json';
+
+const cells = (sliceA.cells || []) as any[];
+const engines = (sliceA.engines || []) as string[];
+const scales  = (sliceA.scales || []) as string[];
+
+const enginePalette: Record<string, string> = {
+  'skeg-int8':    '#1b1b1b',
+  'skeg-pq128':   '#2c6e9b',
+  'qdrant-hnsw':  '#7a5cd4',
+  'qdrant-pq':    '#a48bfb',
+  'qdrant-sq':    '#5c4096',
+  'chroma-hnsw':  '#d4845c',
+};
+const enginePaletteDark: Record<string, string> = {
+  'skeg-int8':    '#ece7d8',
+  'skeg-pq128':   '#6fb3e3',
+  'qdrant-hnsw':  '#a48bfb',
+  'qdrant-pq':    '#c6b4ff',
+  'qdrant-sq':    '#826ec0',
+  'chroma-hnsw':  '#f4a87c',
+};
+
+const fmt = (v: any, d = 1) => (v == null || (typeof v === 'number' && isNaN(v))) ? '-' : (typeof v === 'number' ? v.toFixed(d) : String(v));
+const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toString();
+---
+<BenchLayout title="slice A · competitive · skegdb benchmarks"
+             description="Recall, RSS and latency across vector engines at scale"
+             slice="a">
+
+  <header class="bench-hero">
+    <p class="hero-eyebrow">slice A · competitive matrix</p>
+    <h1>six engines, three scales, four metrics</h1>
+    <p class="hero-sub">
+      How does each engine scale on the same corpus as the dataset grows? Slice
+      A fixes the effort knob (skeg <code>l_search=300</code>, qdrant
+      <code>ef=128</code>, chroma <code>ef=128</code>), runs each engine three
+      times at 100K, 500K, and 1M vectors, and reports the median. The same
+      single corpus is used by everyone: Simple English Wikipedia passages,
+      embedded with <code>mxbai-embed-large-v1</code> 1024d.
+    </p>
+  </header>
+
+  <BenchInsight kind="finding">
+    <p>
+      <strong>skeg-pq128 uses an order of magnitude less RAM than competitors</strong>
+      while matching their recall.
+      At 500K vectors skeg-pq128 sits at ~228 MiB RSS with recall@10 = 0.9994.
+      Qdrant-hnsw needs ~2.3 GB for similar recall, Chroma-hnsw ~2.4 GB.
+      skeg-int8 trades a 2.7× RAM bump for highest recall (still 3× smaller
+      than the HNSW competitors).
+    </p>
+  </BenchInsight>
+
+  <MachineContext snapshot="slice-a" />
+
+  <BenchInsight kind="context">
+    <p>
+      Concurrency 1. Three runs per (engine, scale), median tabulated.
+      Effort knobs fixed at the value that should land each engine in its
+      "production default" operating point. The recall/latency frontier
+      across knob values is in <a href="/bench/slice-b/">slice B</a>.
+    </p>
+  </BenchInsight>
+
+  <DataProvenance
+    corpus="simple-wiki"
+    embedder="mxbai"
+    groundTruth="exact-bruteforce"
+  />
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>recall @ 10</h2>
+      <p class="bench-section-text">
+        Of the engine's top-10 nearest neighbours, how many appear in the
+        brute-force exact top-10? Higher is better. Above 0.99 the engines are
+        functionally identical; below 0.95 you're starting to miss material.
+      </p>
+    </div>
+    <div id="chart-recall" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>recall @ 100</h2>
+      <p class="bench-section-text">
+        A tougher recall test: of the top-100, how many are real top-100?
+        This punishes engines whose quantization is too aggressive (qdrant-pq
+        in particular bleeds quality here).
+      </p>
+    </div>
+    <div id="chart-recall100" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>disk vs RAM · how much of the index is actually loaded</h2>
+      <p class="bench-section-text">
+        Same dataset on disk for everyone (mxbai 1024d, ~4 GB at 1M). The
+        question is: how much of that ends up resident in RAM during
+        queries? <strong>HNSW backends (qdrant, chroma) keep the full
+        index in RAM by design</strong>: their RSS tracks disk size
+        almost 1:1. <strong>skeg is SSD-primary</strong>: PQ-128 codes are
+        32× smaller than f32 vectors, only hot pages of the Vamana graph
+        are kept warm, and the OS evicts the rest. At 1M, skeg-pq128
+        holds about <strong>10% of the index in RAM</strong> while
+        qdrant-hnsw holds <strong>96%</strong>. Same dataset, same
+        recall, ten times less memory budget consumed.
+      </p>
+    </div>
+    <div id="chart-disk-ram" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>RSS at steady state</h2>
+      <p class="bench-section-text">
+        Resident memory of the engine process during the query loop. On a
+        personal-AI machine the LLM owns most of the RAM · the vector store
+        should not contend for it. Lower is better, and the gap matters
+        because each MiB the store doesn't use is one the LLM can keep
+        warm.
+      </p>
+    </div>
+    <div id="chart-rss" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>query latency p99</h2>
+      <p class="bench-section-text">
+        99th-percentile single-query latency at concurrency=1. Includes
+        protocol overhead, not just search; see <a href="/bench/slice-b/">slice B</a>
+        for the recall/latency frontier per engine.
+      </p>
+    </div>
+    <div id="chart-latency" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>throughput at concurrency = 1</h2>
+      <p class="bench-section-text">
+        Sustained QPS in a tight single-client loop. Higher is better. skeg's
+        binary protocol gives it a transport edge here; for fairness, treat
+        these numbers as the single-machine ceiling · see also <a href="/bench/slice-c/">slice C</a>
+        for how each engine scales under concurrent load.
+      </p>
+    </div>
+    <div id="chart-qps" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>build time</h2>
+      <p class="bench-section-text">
+        Time to ingest the corpus and build the index. One-shot cost, paid
+        once per dataset. Less interesting in production (you do it at
+        prep-time) but useful for reproducibility.
+      </p>
+    </div>
+    <div id="chart-build" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>all numbers</h2>
+      <p class="bench-section-text">Click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="data-table">
+        <thead>
+          <tr>
+            <th>engine</th>
+            <th>scale</th>
+            <th>n vectors</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 µs</th>
+            <th>p99 µs</th>
+            <th>qps</th>
+            <th>rss MiB</th>
+            <th>build s</th>
+            <th>disk MiB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cells.sort((a, b) => (scales.indexOf(a.scale) - scales.indexOf(b.scale)) || a.engine.localeCompare(b.engine)).map((r: any) => (
+            <tr>
+              <td><span class={`engine-dot engine-${r.engine}`}></span>{r.engine}</td>
+              <td>{r.scale}</td>
+              <td class="num">{r.n?.toLocaleString()}</td>
+              <td class="num">{fmt(r['recall@10'], 4)}</td>
+              <td class="num">{fmt(r['recall@100'], 4)}</td>
+              <td class="num">{fmtInt(r['p50_us'])}</td>
+              <td class="num">{fmtInt(r['p99_us'])}</td>
+              <td class="num">{fmtInt(r['qps'])}</td>
+              <td class="num">{fmt(r['rss_steady_mib'], 1)}</td>
+              <td class="num">{fmt(r['build_s'], 1)}</td>
+              <td class="num">{fmt(r['disk_mib'], 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-methodology">
+    <h2>more</h2>
+    <ul>
+      <li><strong>Dataset</strong>: Wikipedia Simple English, passages ≥500 chars, first ~400 chars per chunk. <code>mxbai-embed-large-v1</code> via sentence-transformers MPS.</li>
+      <li><strong>Engines & knobs</strong>: skeg-pq128 / skeg-int8 at <code>l_search=300</code>; qdrant-hnsw / qdrant-sq at <code>ef=128</code>; qdrant-pq at <code>ef=128 nprobes=64</code>; chroma-hnsw at default <code>ef=128</code>.</li>
+      <li><strong>LanceDB</strong>: excluded from the public charts due to a known config issue that produced badly degraded recall in this run (~0.68). The tier-mode and disk-layout knobs need a careful rerun before LanceDB numbers can be compared fairly.</li>
+      <li><strong>Sweep</strong>: 3 runs × (engine × scale), median reported. Concurrency 1.</li>
+      <li><strong>Replication</strong>: the same matrix was also run with the smaller <code>minilm-l6-v2</code> embedder (384d); results are consistent · skeg holds the RAM advantage at lower dimensionality too.</li>
+    </ul>
+  </section>
+
+  <script is:inline id="bench-data" type="application/json" set:html={JSON.stringify({ cells, engines, scales, palette: enginePalette, paletteDark: enginePaletteDark })} />
+
+  <script is:inline>
+    (function () {
+      var dataEl = document.getElementById('bench-data');
+      if (!dataEl || !window.echarts) return;
+      var data;
+      try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+      function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+      function colors() {
+        var dark = isDark();
+        return { fg: dark ? '#ece7d8' : '#1b1b1b', mute: dark ? '#8f897a' : '#6b665d',
+                 rule: dark ? '#3a3830' : '#d6d1c4', axis: dark ? '#3a3830' : '#b9b2a0',
+                 bg: dark ? '#1c1b16' : '#ffffff' };
+      }
+      function paletteFor(engine) {
+        return (isDark() ? data.paletteDark[engine] : data.palette[engine]) || '#999';
+      }
+      function baseOpts() {
+        var c = colors();
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700, animationEasing: 'cubicOut',
+          grid: { left: 70, right: 28, top: 24, bottom: 70, containLabel: true },
+          legend: {
+            bottom: 0,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            trigger: 'axis',
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            padding: [8, 12], extraCssText: 'box-shadow: 0 4px 24px rgba(0,0,0,0.18); border-radius: 0;',
+          },
+          xAxis: {
+            type: 'category', data: data.scales,
+            axisLine: { lineStyle: { color: c.axis } },
+            axisTick: { lineStyle: { color: c.axis } },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+          },
+          yAxis: {
+            type: 'value',
+            axisLine: { show: false }, axisTick: { show: false },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+            splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          },
+        };
+      }
+      function pivot(metric) {
+        return data.engines.map(function (engine) {
+          var values = data.scales.map(function (s) {
+            var row = data.cells.find(function (c) { return c.engine === engine && c.scale === s; });
+            return row ? row[metric] ?? null : null;
+          });
+          return { engine: engine, values: values };
+        });
+      }
+      function barSeries(metric) {
+        return pivot(metric).map(function (row) {
+          return {
+            name: row.engine, type: 'bar', barMaxWidth: 28,
+            itemStyle: { color: paletteFor(row.engine), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' }, data: row.values,
+          };
+        });
+      }
+      function lineSeries(metric) {
+        return pivot(metric).map(function (row) {
+          return {
+            name: row.engine, type: 'line', smooth: true,
+            symbol: 'circle', symbolSize: 9,
+            itemStyle: { color: paletteFor(row.engine) },
+            lineStyle: { color: paletteFor(row.engine), width: 2.5 },
+            emphasis: { focus: 'series', scale: 1.6 }, data: row.values,
+          };
+        });
+      }
+      function chart(id, build) {
+        var el = document.getElementById(id); if (!el) return null;
+        var inst = window.echarts.init(el, null, { renderer: 'svg' });
+        inst.setOption(build());
+        return inst;
+      }
+
+      function recallOptions(metric, title) {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'value', min: 0.5, max: 1.0,
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v.toFixed(2); } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: title, nameLocation: 'middle', nameGap: 50,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = lineSeries(metric);
+        return opts;
+      }
+      function rssOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'log',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1024 ? (v/1024).toFixed(1) + ' GiB' : v + ' MiB'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'RSS · log', nameLocation: 'middle', nameGap: 70,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.tooltip.formatter = function (params) {
+          var lines = ['<b>' + params[0].axisValue + '</b>'];
+          params.forEach(function (p) {
+            if (p.value == null) return;
+            var v = p.value;
+            var fmt = v >= 1024 ? (v/1024).toFixed(2) + ' GiB' : Math.round(v) + ' MiB';
+            lines.push(' <span style="color:' + paletteFor(p.seriesName) + '">●</span> ' + p.seriesName + '  ' + fmt);
+          });
+          return lines.join('<br>');
+        };
+        opts.series = barSeries('rss_steady_mib');
+        return opts;
+      }
+      function latencyOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'log',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1000 ? (v/1000) + ' ms' : v + ' µs'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'p99 · log', nameLocation: 'middle', nameGap: 55,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = lineSeries('p99_us');
+        return opts;
+      }
+      function qpsOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'value',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'QPS', nameLocation: 'middle', nameGap: 50,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = lineSeries('qps');
+        return opts;
+      }
+      function diskRamOptions() {
+        // For each (scale, engine): pair of bars · disk total + in-RAM (RSS).
+        // Disk is the architectural state on storage; RSS is what got
+        // loaded into RAM by the engine while serving queries.
+        var c = colors();
+        var orderedScales = ['100k', '500k', '1m'];
+        var engines = data.engines;
+        // Build series: two bars per engine (disk and rss) grouped by scale on x.
+        var diskSeries = engines.map(function (engine) {
+          return {
+            name: engine + ' · disk',
+            type: 'bar',
+            stack: engine,
+            barMaxWidth: 18,
+            itemStyle: {
+              color: paletteFor(engine) + '33',
+              borderColor: paletteFor(engine),
+              borderWidth: 1.2,
+            },
+            emphasis: { focus: 'series' },
+            data: orderedScales.map(function (s) {
+              var row = data.cells.find(function (c) { return c.engine === engine && c.scale === s; });
+              if (!row) return null;
+              var disk = row.disk_mib || 0;
+              var rss = row.rss_steady_mib || 0;
+              return Math.max(disk - rss, 0);
+            }),
+            tooltip: { show: false },
+            legendHoverLink: false,
+            showInLegend: false,
+          };
+        });
+        var rssSeries = engines.map(function (engine) {
+          return {
+            name: engine,
+            type: 'bar',
+            stack: engine,
+            barMaxWidth: 18,
+            itemStyle: {
+              color: paletteFor(engine),
+            },
+            emphasis: { focus: 'series' },
+            data: orderedScales.map(function (s) {
+              var row = data.cells.find(function (c) { return c.engine === engine && c.scale === s; });
+              return row ? row.rss_steady_mib || 0 : null;
+            }),
+          };
+        });
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700,
+          grid: { left: 70, right: 28, top: 24, bottom: 90, containLabel: true },
+          legend: {
+            data: engines,
+            bottom: 0,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            trigger: 'axis', axisPointer: { type: 'shadow' },
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            formatter: function (params) {
+              var byEngine = {};
+              params.forEach(function (p) {
+                if (!p.seriesName) return;
+                var key = p.seriesName.split(' · ')[0];
+                byEngine[key] = byEngine[key] || {};
+                var row = data.cells.find(function (c) { return c.engine === key && c.scale === orderedScales[p.dataIndex]; });
+                if (row) {
+                  byEngine[key].disk = row.disk_mib || 0;
+                  byEngine[key].rss = row.rss_steady_mib || 0;
+                }
+              });
+              var s = orderedScales[params[0].dataIndex];
+              var lines = ['<b>' + s + '</b> corpus'];
+              Object.keys(byEngine).forEach(function (k) {
+                var v = byEngine[k];
+                if (v.disk == null) return;
+                var pct = v.disk > 0 ? (v.rss / v.disk * 100).toFixed(0) : '·';
+                lines.push(' <span style="color:' + paletteFor(k) + '">●</span> ' +
+                           k + ' &nbsp;disk ' + Math.round(v.disk).toLocaleString() +
+                           ' &nbsp;RAM ' + Math.round(v.rss).toLocaleString() +
+                           ' &nbsp;<strong>(' + pct + '% resident)</strong>');
+              });
+              return lines.join('<br>');
+            },
+          },
+          xAxis: {
+            type: 'category', data: orderedScales,
+            axisLine: { lineStyle: { color: c.axis } },
+            axisTick: { lineStyle: { color: c.axis } },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+          },
+          yAxis: {
+            type: 'value',
+            name: 'MiB · total bar = disk · filled = in RAM',
+            nameLocation: 'middle', nameGap: 70,
+            nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+            axisLine: { show: false }, axisTick: { show: false },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1024 ? (v/1024).toFixed(1) + ' GiB' : v + ' MiB'; } },
+            splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          },
+          series: rssSeries.concat(diskSeries),
+        };
+      }
+
+      function buildOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'value',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v + ' s'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'build time', nameLocation: 'middle', nameGap: 55,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = barSeries('build_s');
+        return opts;
+      }
+
+      var charts = {
+        recall:    chart('chart-recall',    function () { return recallOptions('recall@10',  'recall @ 10'); }),
+        recall100: chart('chart-recall100', function () { return recallOptions('recall@100', 'recall @ 100'); }),
+        rss:       chart('chart-rss',       rssOptions),
+        latency:   chart('chart-latency',   latencyOptions),
+        qps:       chart('chart-qps',       qpsOptions),
+        build:     chart('chart-build',     buildOptions),
+      };
+      function reRender() {
+        Object.entries({
+          'chart-recall':    function () { return recallOptions('recall@10',  'recall @ 10'); },
+          'chart-recall100': function () { return recallOptions('recall@100', 'recall @ 100'); },
+          'chart-rss':       rssOptions,
+          'chart-latency':   latencyOptions,
+          'chart-qps':       qpsOptions,
+          'chart-build':     buildOptions,
+        }).forEach(function (kv) {
+          var key = kv[0]; var fn = kv[1];
+          var c = charts[key.replace('chart-', '')];
+          if (c) c.setOption(fn(), true);
+        });
+      }
+      window.addEventListener('resize', function () {
+        Object.values(charts).forEach(function (c) { if (c) c.resize(); });
+      });
+      document.querySelectorAll('[data-chart]').forEach(function (el) {
+        el.addEventListener('skegdb-theme-changed', reRender);
+      });
+
+      function trySort(headerEl) {
+        var tbody = document.querySelector('#data-table tbody');
+        var headers = Array.from(document.querySelectorAll('#data-table th'));
+        var idx = headers.indexOf(headerEl);
+        var asc = headerEl.dataset.dir !== 'asc';
+        headers.forEach(function (h) { h.dataset.dir = ''; h.classList.remove('sorted', 'asc'); });
+        headerEl.dataset.dir = asc ? 'asc' : 'desc';
+        headerEl.classList.add('sorted', asc ? 'asc' : 'desc');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+          var aa = a.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var bb = b.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var an = parseFloat(aa), bn = parseFloat(bb);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      }
+      document.querySelectorAll('#data-table th').forEach(function (th) {
+        th.addEventListener('click', function () { trySort(th); });
+      });
+    })();
+  </script>
+
+  <style>
+    .bench-hero { margin-bottom: 16px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--fg); max-width: 720px; font-size: 15px; line-height: 1.6; }
+    .hero-sub code { background: var(--bg-pill); padding: 1px 6px; font-size: 13px; }
+    .hero-sub a { color: var(--fg); }
+  </style>
+</BenchLayout>

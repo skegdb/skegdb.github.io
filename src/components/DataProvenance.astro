@@ -1,0 +1,119 @@
+---
+/**
+ * Explains where the data comes from for a slice: corpus, embedder, queries,
+ * ground truth. Optional `extras` slot for slice-specific details (e.g.
+ * "passages were re-synthesized for slice D because the original chunking
+ * script was lost").
+ */
+interface Props {
+  corpus: 'simple-wiki' | 'enwiki-chunked';
+  embedder: 'mxbai' | 'minilm' | 'mxbai+minilm';
+  groundTruth?: 'exact-bruteforce' | 'shared-across-engines' | 'none';
+  queries?: string;
+  notes?: string;
+}
+const {
+  corpus,
+  embedder,
+  groundTruth = 'exact-bruteforce',
+  queries = '1 000 hold-out passages, disjoint from corpus',
+  notes,
+} = Astro.props;
+
+const corpusText = {
+  'simple-wiki':
+    'Simple English Wikipedia, passages ≥ 500 chars truncated to ~400 chars. Public dump preprocessed once and frozen for the bench.',
+  'enwiki-chunked':
+    'English Wikipedia (full) chunked at 400 chars on sentence boundaries. Same pool used across all corpus sizes (10K, 25K, 50K… 1M) by sequential slicing.',
+}[corpus];
+
+const embedderText = {
+  mxbai:
+    'mxbai-embed-large-v1, 1024 dimensions. sentence-transformers via Apple Metal (MPS). Same model used to embed corpus and queries (no cross-model leakage).',
+  minilm:
+    'all-MiniLM-L6-v2, 384 dimensions. sentence-transformers via Apple Metal (MPS). Smaller, faster, used as a replication check.',
+  'mxbai+minilm':
+    'Both mxbai-embed-large-v1 (1024d) and all-MiniLM-L6-v2 (384d) are used as orthogonal embedders for cross-check.',
+}[embedder];
+
+const gtText = {
+  'exact-bruteforce':
+    'Top-100 nearest neighbours computed with exact brute-force cosine over float32 vectors. Computed once per scale, reused by every engine, frozen as a parquet next to the corpus.',
+  'shared-across-engines':
+    'Ground truth shared verbatim across engines so recall comparisons are apples-to-apples (no per-engine GT, no per-engine re-embedding).',
+  'none':
+    'No retrieval recall measured here; this slice answers a different question (memory pressure, throughput under co-residence).',
+}[groundTruth];
+---
+<section class="bench-section data-provenance">
+  <div class="bench-section-head">
+    <h2>data provenance</h2>
+    <p class="bench-section-text">
+      Where the numbers come from. Same source, same generator, same ground
+      truth for every engine in the comparison.
+    </p>
+  </div>
+
+  <div class="provenance-grid">
+    <div class="provenance-row">
+      <span class="provenance-label">corpus</span>
+      <p>{corpusText}</p>
+    </div>
+
+    <div class="provenance-row">
+      <span class="provenance-label">embedder</span>
+      <p>{embedderText}</p>
+    </div>
+
+    <div class="provenance-row">
+      <span class="provenance-label">queries</span>
+      <p>{queries}</p>
+    </div>
+
+    <div class="provenance-row">
+      <span class="provenance-label">ground&nbsp;truth</span>
+      <p>{gtText}</p>
+    </div>
+
+    {notes && (
+      <div class="provenance-row">
+        <span class="provenance-label">notes</span>
+        <p set:html={notes} />
+      </div>
+    )}
+
+    <slot />
+  </div>
+</section>
+
+<style>
+  .data-provenance .provenance-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 12px 24px;
+    align-items: baseline;
+  }
+  .provenance-row {
+    display: contents;
+  }
+  .provenance-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--mute);
+    white-space: nowrap;
+  }
+  .data-provenance p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--fg);
+  }
+  .data-provenance code {
+    font-family: var(--mono);
+    background: var(--bg-pill);
+    padding: 1px 6px;
+    font-size: 12px;
+  }
+</style>

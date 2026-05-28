@@ -1,0 +1,339 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import MachineContext from '~/components/MachineContext.astro';
+import DataProvenance from '~/components/DataProvenance.astro';
+import sliceB from '~/data/bench/slice-b.json';
+
+const cells = (sliceB.cells || []) as any[];
+const engines = (sliceB.engines || []) as string[];
+
+const enginePalette: Record<string, string> = {
+  'skeg-int8':    '#1b1b1b',
+  'skeg-pq128':   '#2c6e9b',
+  'qdrant-hnsw':  '#7a5cd4',
+  'qdrant-pq':    '#a48bfb',
+  'qdrant-sq':    '#5c4096',
+  'chroma-hnsw':  '#d4845c',
+};
+const enginePaletteDark: Record<string, string> = {
+  'skeg-int8':    '#ece7d8',
+  'skeg-pq128':   '#6fb3e3',
+  'qdrant-hnsw':  '#a48bfb',
+  'qdrant-pq':    '#c6b4ff',
+  'qdrant-sq':    '#826ec0',
+  'chroma-hnsw':  '#f4a87c',
+};
+
+const fmt = (v: any, d = 1) => (v == null || (typeof v === 'number' && isNaN(v))) ? '-' : (typeof v === 'number' ? v.toFixed(d) : String(v));
+const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toString();
+---
+<BenchLayout title="slice B · efficiency · skegdb benchmarks"
+             description="recall vs latency frontier per engine"
+             slice="b">
+
+  <header class="bench-hero">
+    <p class="hero-eyebrow">slice B · efficiency frontier</p>
+    <h1>recall vs latency, per engine</h1>
+    <p class="hero-sub">
+      Slice A fixes the effort knob and compares engines at one operating
+      point. Slice B does the opposite: it sweeps each engine's effort knob
+      across its whole range, at <strong>N = 500K</strong>, and plots the
+      recall/latency frontier. Where's the knee? How much latency do you pay
+      for the last point of recall? Is the default knob value right?
+    </p>
+  </header>
+
+  <BenchInsight kind="finding">
+    <p>
+      <strong>skeg-pq128 knees at <code>l_search = 500</code></strong>:
+      recall@10 saturates at 0.9999, recall@100 at 0.986. Pushing l_search to
+      800 buys +0.001 recall for −25% QPS · overkill.
+    </p>
+    <p>
+      <strong>skeg-int8 knees earlier, at <code>l_search = 200</code></strong>:
+      recall@10 = 0.9974, recall@100 = 0.988, QPS = 984. The default value of
+      100 leaves 2–3% recall on the table for marginal latency savings.
+    </p>
+  </BenchInsight>
+
+  <MachineContext snapshot="slice-ab" fallback="slice-a" />
+
+  <DataProvenance
+    corpus="simple-wiki"
+    embedder="mxbai"
+    groundTruth="exact-bruteforce"
+    queries="1 000 hold-out passages (same set as slice A) re-used at this scale."
+  />
+
+  <BenchInsight kind="context">
+    <p>
+      Single scale (500K vectors), concurrency 1, median of 3 runs per
+      (engine, knob) point. Same corpus as <a href="/bench/slice-a/">slice A</a>:
+      Simple Wikipedia, <code>mxbai-embed-large-v1</code> 1024d.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>recall @ 10 vs p99 latency</h2>
+      <p class="bench-section-text">
+        Each dot is a (knob-value, recall, latency) point. The line connects
+        the dots in sweep order, tracing one engine's frontier. Lower-right
+        is better: high recall at low latency. Hover any dot for the exact
+        knob value; the steepness of the line tells you how aggressive the
+        recall/latency trade is on that engine.
+      </p>
+    </div>
+    <div id="chart-frontier" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>QPS as the knob opens</h2>
+      <p class="bench-section-text">
+        Throughput at single-client concurrency as the effort knob grows.
+        Each engine has a different knob (skeg <code>l_search</code> 50–800,
+        qdrant <code>ef</code> 32–512, qdrant-pq adds <code>nprobes</code>),
+        so the lines start at different X positions · that's the knob's
+        valid range, not a render glitch. Compare lines vertically at the
+        same X for a fair "at this effort level" view, and use the
+        frontier above for the apples-to-apples recall-vs-latency picture.
+      </p>
+    </div>
+    <div id="chart-qps" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>all numbers</h2>
+      <p class="bench-section-text">Click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="data-table">
+        <thead>
+          <tr>
+            <th>engine</th>
+            <th>scale</th>
+            <th>knob</th>
+            <th>value</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 µs</th>
+            <th>p99 µs</th>
+            <th>qps</th>
+            <th>rss MiB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cells.sort((a, b) => a.engine.localeCompare(b.engine) || (a.sweep_value ?? 0) - (b.sweep_value ?? 0)).map((r: any) => (
+            <tr>
+              <td><span class={`engine-dot engine-${r.engine}`}></span>{r.engine}</td>
+              <td>{r.scale}</td>
+              <td>{r.sweep_param}</td>
+              <td class="num">{fmt(r.sweep_value, 0)}</td>
+              <td class="num">{fmt(r['recall@10'], 4)}</td>
+              <td class="num">{fmt(r['recall@100'], 4)}</td>
+              <td class="num">{fmtInt(r['p50_us'])}</td>
+              <td class="num">{fmtInt(r['p99_us'])}</td>
+              <td class="num">{fmtInt(r['qps'])}</td>
+              <td class="num">{fmt(r['rss_steady_mib'], 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script is:inline id="bench-data" type="application/json" set:html={JSON.stringify({ cells, engines, palette: enginePalette, paletteDark: enginePaletteDark })} />
+
+  <script is:inline>
+    (function () {
+      var dataEl = document.getElementById('bench-data');
+      if (!dataEl || !window.echarts) return;
+      var data;
+      try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+      function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+      function colors() {
+        var dark = isDark();
+        return { fg: dark ? '#ece7d8' : '#1b1b1b', mute: dark ? '#8f897a' : '#6b665d',
+                 rule: dark ? '#3a3830' : '#d6d1c4', axis: dark ? '#3a3830' : '#b9b2a0',
+                 bg: dark ? '#1c1b16' : '#ffffff' };
+      }
+      function paletteFor(engine) {
+        return (isDark() ? data.paletteDark[engine] : data.palette[engine]) || '#999';
+      }
+      function baseOpts() {
+        var c = colors();
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700, animationEasing: 'cubicOut',
+          grid: { left: 70, right: 28, top: 24, bottom: 70, containLabel: true },
+          legend: {
+            bottom: 0,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            padding: [8, 12], extraCssText: 'box-shadow: 0 4px 24px rgba(0,0,0,0.18); border-radius: 0;',
+          },
+        };
+      }
+
+      function chart(id, build) {
+        var el = document.getElementById(id); if (!el) return null;
+        var inst = window.echarts.init(el, null, { renderer: 'svg' });
+        inst.setOption(build());
+        return inst;
+      }
+
+      function frontierOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.tooltip.trigger = 'item';
+        opts.tooltip.formatter = function (p) {
+          var d = p.data;
+          return '<b>' + d[3] + '</b><br>' +
+                 d[4] + ' = ' + d[5] + '<br>' +
+                 'recall@10  ' + d[0].toFixed(4) + '<br>' +
+                 'p99        ' + Math.round(d[1]) + ' µs';
+        };
+        opts.xAxis = {
+          type: 'value', min: 0.7, max: 1.0,
+          name: 'recall @ 10', nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v.toFixed(2); } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.yAxis = {
+          type: 'log',
+          name: 'p99 · µs · log',
+          nameLocation: 'middle', nameGap: 55,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1000 ? (v/1000) + ' ms' : v + ' µs'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        var byEngine = {};
+        data.cells.forEach(function (r) {
+          if (r['recall@10'] == null || r['p99_us'] == null) return;
+          (byEngine[r.engine] = byEngine[r.engine] || []).push([
+            r['recall@10'], r['p99_us'], r.sweep_value, r.engine, r.sweep_param, r.sweep_value,
+          ]);
+        });
+        opts.series = data.engines.map(function (engine) {
+          var pts = (byEngine[engine] || []).sort(function (a, b) { return a[0] - b[0]; });
+          var color = paletteFor(engine);
+          return {
+            name: engine, type: 'scatter',
+            symbol: 'circle', symbolSize: 11,
+            itemStyle: {
+              color: color, borderColor: c.bg, borderWidth: 1.5,
+            },
+            emphasis: { focus: 'series', scale: 1.4 },
+            data: pts, z: 3,
+            markLine: {
+              silent: true, symbol: 'none',
+              lineStyle: { color: color, opacity: 0.4, width: 1.5, type: 'solid' },
+              data: pts.length >= 2 ? pts.map(function (p, i) {
+                return i === 0 ? null : [{ coord: [pts[i-1][0], pts[i-1][1]] }, { coord: [p[0], p[1]] }];
+              }).filter(Boolean) : [],
+            },
+          };
+        });
+        return opts;
+      }
+
+      function qpsOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.tooltip.trigger = 'axis';
+        var byEngine = {};
+        data.cells.forEach(function (r) { (byEngine[r.engine] = byEngine[r.engine] || []).push(r); });
+        Object.keys(byEngine).forEach(function (k) {
+          byEngine[k].sort(function (a, b) { return (a.sweep_value || 0) - (b.sweep_value || 0); });
+        });
+        opts.xAxis = {
+          type: 'log',
+          name: 'knob value · log',
+          nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.yAxis = {
+          type: 'value',
+          name: 'QPS', nameLocation: 'middle', nameGap: 60,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.series = data.engines.map(function (engine) {
+          var rows = byEngine[engine] || [];
+          return {
+            name: engine, type: 'line', smooth: true,
+            symbol: 'circle', symbolSize: 9,
+            itemStyle: { color: paletteFor(engine) },
+            lineStyle: { color: paletteFor(engine), width: 2.5 },
+            emphasis: { focus: 'series', scale: 1.4 },
+            data: rows.map(function (r) { return [r.sweep_value, r.qps]; }),
+          };
+        });
+        return opts;
+      }
+
+      var charts = {
+        frontier: chart('chart-frontier', frontierOptions),
+        qps:      chart('chart-qps', qpsOptions),
+      };
+      function reRender() {
+        if (charts.frontier) charts.frontier.setOption(frontierOptions(), true);
+        if (charts.qps) charts.qps.setOption(qpsOptions(), true);
+      }
+      window.addEventListener('resize', function () {
+        Object.values(charts).forEach(function (c) { if (c) c.resize(); });
+      });
+      document.querySelectorAll('[data-chart]').forEach(function (el) {
+        el.addEventListener('skegdb-theme-changed', reRender);
+      });
+
+      function trySort(headerEl) {
+        var tbody = document.querySelector('#data-table tbody');
+        var headers = Array.from(document.querySelectorAll('#data-table th'));
+        var idx = headers.indexOf(headerEl);
+        var asc = headerEl.dataset.dir !== 'asc';
+        headers.forEach(function (h) { h.dataset.dir = ''; h.classList.remove('sorted', 'asc'); });
+        headerEl.dataset.dir = asc ? 'asc' : 'desc';
+        headerEl.classList.add('sorted', asc ? 'asc' : 'desc');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+          var aa = a.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var bb = b.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var an = parseFloat(aa), bn = parseFloat(bb);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      }
+      document.querySelectorAll('#data-table th').forEach(function (th) {
+        th.addEventListener('click', function () { trySort(th); });
+      });
+    })();
+  </script>
+
+  <style>
+    .bench-hero { margin-bottom: 32px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--mute); max-width: 720px; font-size: 15px; line-height: 1.55; }
+  </style>
+</BenchLayout>

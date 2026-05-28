@@ -1,0 +1,50 @@
+---
+interface Props {
+  kind?: 'finding' | 'context' | 'caveat';
+  label?: string;
+}
+const { kind = 'finding', label } = Astro.props;
+const labelText = label ?? ({
+  finding: 'key finding',
+  context: 'context',
+  caveat:  'caveat',
+}[kind]);
+---
+<aside class={`bench-insight bench-insight-${kind}`}>
+  <span class="bench-insight-label">{labelText}</span>
+  <div class="bench-insight-body"><slot /></div>
+</aside>
+
+<style>
+  .bench-insight {
+    margin: 20px 0 24px;
+    padding: 16px 20px;
+    border-left: 3px solid var(--rule);
+    background: var(--bg-card);
+  }
+  .bench-insight-finding { border-left-color: var(--ok); }
+  .bench-insight-caveat  { border-left-color: var(--warn); }
+  .bench-insight-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--mute);
+    margin-bottom: 6px;
+  }
+  .bench-insight-finding .bench-insight-label { color: var(--ok); }
+  .bench-insight-caveat  .bench-insight-label { color: var(--warn); }
+  .bench-insight-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--fg);
+  }
+  .bench-insight-body p { margin: 0; }
+  .bench-insight-body p + p { margin-top: 8px; }
+  .bench-insight-body strong { font-weight: 500; }
+  .bench-insight-body code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg-pill); padding: 1px 6px;
+  }
+</style>

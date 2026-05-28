@@ -1,0 +1,152 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import index from '~/data/bench/index.json';
+
+const slices = [
+  {
+    id: 'a',
+    name: 'competitive',
+    headline: 'Recall + RSS comparison at scale',
+    text: 'Six engines, one corpus, three scales (100K → 1M). Each engine in its default production-like configuration. One row per (engine, scale) on the same metrics: recall@10, build time, steady RSS, query p99.',
+    href: '/bench/slice-a/',
+  },
+  {
+    id: 'b',
+    name: 'efficiency',
+    headline: 'Recall/latency frontier',
+    text: 'Per-engine sweep of the query-time effort knob (l_search for skeg, ef for HNSW backends, nprobes for PQ variants). Traces the Pareto frontier at 500K and exposes each engine\'s "knee" · where buying more recall starts costing too much latency.',
+    href: '/bench/slice-b/',
+  },
+  {
+    id: 'c',
+    name: 'concurrency',
+    headline: 'How each engine scales with concurrent clients',
+    text: 'Same scale (100K), concurrency from 1 to 64. All single-machine engines saturate around the same throughput (~640 QPS); past that point you need multi-process, not more cores. Recall stays flat under load · the search is deterministic.',
+    href: '/bench/slice-c/',
+  },
+  {
+    id: 'd',
+    name: 'co-residence',
+    headline: 'Vector store + LLM on the same machine',
+    text: 'The realistic case: a 3B local LLM (Llama 3.2 Q4_K_M) is answering RAG questions while a vector store serves retrievals. Sweep 10K → 1M corpus. The killer metric is backend RSS · skeg stays <80 MiB at 1M, qdrant peaks above 3 GiB.',
+    href: '/bench/slice-d/',
+  },
+  {
+    id: 'e',
+    name: 'internals',
+    headline: 'skeg tier menu, low-ram mode, cold-start',
+    text: 'skeg-internal sweep: int8 vs pq:128 vs turboquant-{1,2,4}. Same engine, different compression tiers · the recall/RAM/disk tradeoff inside the system. Plus low-ram mode (M0 prototype) and cold-start RSS (first-query memory cost).',
+    href: '/bench/slice-e/',
+  },
+];
+const available = new Set(index.slices.filter((s: any) => s.available).map((s: any) => s.id));
+---
+<BenchLayout title="skegdb · benchmarks" description="Competitive benchmarks for skeg.">
+  <header class="bench-hero">
+    <p class="hero-eyebrow">benchmarks</p>
+    <h1>frozen methodology · open data</h1>
+    <p class="hero-sub">
+      Evaluations of skeg against established vector stores and inside itself.
+      Single-machine personal-AI hardware (Apple M1 Pro · 16 GiB). Each slice
+      has a pre-registered methodology that was decided <em>before</em> the
+      run; configurations are not re-tuned after results come in. Every chart
+      below is rendered from the same parquet/CSV that drives the harness.
+    </p>
+  </header>
+
+  <BenchInsight kind="finding" label="where skeg lands">
+    <p>
+      <strong>skeg is the memory-frugal vector store for personal-AI machines</strong>.
+      At 500K vectors with the same corpus, skeg-pq128 uses
+      <strong>~228 MiB</strong> with recall@10 = 0.9994. The HNSW competitors
+      (Qdrant, Chroma) sit around <strong>2 300–3 000 MiB</strong> for the
+      same recall: a 10× memory gap.
+    </p>
+    <p>
+      The gap comes from architecture, not tuning: skeg's working set lives on
+      SSD (PQ-128 codes + Vamana graph), only hot pages are kept in RAM,
+      and the rest can be evicted by the OS as needed. On a 16 GiB laptop
+      where a 3B LLM owns 2.2 GiB and macOS itself takes several more,
+      this is the difference between "the laptop is breathing" and
+      "everything starts to swap".
+    </p>
+    <p>
+      What skeg is <em>not</em>: not the lowest-latency single-query engine
+      (Qdrant is comparable), not horizontally scalable out of the box
+      (single-shard ceiling ~640 QPS), not as battle-tested in production
+      as Qdrant. Where it wins is the regime it was built for: laptops,
+      DGX Spark, edge boxes · anywhere RAM is contested.
+    </p>
+  </BenchInsight>
+
+  <section class="slice-grid">
+    {slices.map((s) => (
+      <a class={`slice-card ${available.has(s.id) ? '' : 'pending'}`} href={s.href}>
+        <header>
+          <span class="slice-tag">slice {s.id.toUpperCase()}</span>
+          <span class={`slice-status ${available.has(s.id) ? 'ready' : 'pending'}`}>
+            {available.has(s.id) ? 'data live' : 'pending'}
+          </span>
+        </header>
+        <h2>{s.name}</h2>
+        <p class="slice-headline">{s.headline}</p>
+        <p class="slice-text">{s.text}</p>
+      </a>
+    ))}
+  </section>
+
+  <section class="bench-methodology">
+    <h2>about these benchmarks</h2>
+    <ul>
+      <li><strong>Frozen methodology</strong>: configurations, metrics, and pass criteria are decided <em>before</em> the run. No re-tuning after results.</li>
+      <li><strong>Real datasets</strong>: Simple English Wikipedia for slices A/B/C, enwiki chunked for slice D. Embedded with <code>mxbai-embed-large-v1</code> (1024d) or <code>all-minilm-l6-v2</code> (384d) where noted.</li>
+      <li><strong>Native, not Docker</strong>: every engine runs as a native macOS process so RSS comparisons are apples-to-apples (Docker on macOS hides the engine inside a Linux VM and gives misleading RSS).</li>
+      <li><strong>Median over runs</strong>: each (engine, configuration) cell is 2–3 runs minimum, median tabulated. Outliers visible in the per-turn parquet.</li>
+      <li><strong>Excluded</strong>: LanceDB was in the original matrix but its run hit a known config issue producing degraded recall (~0.68). The numbers exist in the raw CSV but are not shown here until a clean re-run lands.</li>
+    </ul>
+  </section>
+
+  <style>
+    .bench-hero { margin-bottom: 28px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--fg); max-width: 720px; font-size: 15px; line-height: 1.6; }
+    .slice-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+      margin-top: 8px;
+    }
+    .slice-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 22px;
+      background: var(--bg-card);
+      border: none;
+      color: inherit;
+      transition: background 120ms ease;
+      cursor: pointer;
+    }
+    .slice-card:hover { background: color-mix(in srgb, var(--bg-card) 92%, var(--fg)); }
+    .slice-card.pending { opacity: 0.6; }
+    .slice-card header { display: flex; justify-content: space-between; align-items: baseline; }
+    .slice-tag { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); }
+    .slice-status {
+      font-family: var(--mono); font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.16em;
+      padding: 2px 8px; border: 1px solid var(--border);
+    }
+    .slice-status.ready { color: var(--ok); border-color: var(--ok); }
+    .slice-status.pending { color: var(--mute); }
+    .slice-card h2 {
+      margin: 0; font-size: 18px; font-weight: 500;
+      text-transform: lowercase; letter-spacing: 0.02em;
+    }
+    .slice-headline { margin: 0; color: var(--fg); font-size: 14px; font-weight: 500; }
+    .slice-text { margin: 0; color: var(--mute); font-size: 13px; line-height: 1.5; }
+  </style>
+</BenchLayout>

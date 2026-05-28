@@ -1,0 +1,29 @@
+{
+  "slices": [
+    {
+      "id": "a",
+      "name": "competitive",
+      "available": true
+    },
+    {
+      "id": "b",
+      "name": "efficiency",
+      "available": true
+    },
+    {
+      "id": "c",
+      "name": "concurrency",
+      "available": true
+    },
+    {
+      "id": "d",
+      "name": "co-residence",
+      "available": true
+    },
+    {
+      "id": "e",
+      "name": "internals",
+      "available": true
+    }
+  ]
+}

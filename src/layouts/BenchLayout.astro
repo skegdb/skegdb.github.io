@@ -1,0 +1,176 @@
+---
+import '~/styles/global.css';
+import Mark from '~/components/Mark.astro';
+import ThemeToggle from '~/components/ThemeToggle.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  slice?: string;
+}
+const {
+  title = 'skegdb · benchmarks',
+  description = 'Competitive benchmarks for skeg vs other vector stores.',
+  slice,
+} = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <meta name="theme-color" content="#f6f3ec" id="meta-theme-color" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+  />
+  <script is:inline src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script is:inline>
+    (function () {
+      try {
+        var t = localStorage.getItem('skegdb-theme') || 'light';
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', t === 'dark' ? '#14130f' : '#f6f3ec');
+      } catch (_) {}
+    })();
+  </script>
+</head>
+<body>
+  <header class="bench-nav">
+    <div class="bench-nav-left">
+      <a href="/" class="bench-home" aria-label="skeg home">
+        <Mark size={36} />
+      </a>
+      <span class="bench-nav-title">benchmarks</span>
+    </div>
+    <nav class="bench-nav-links">
+      <a href="/bench/" class={`bench-link ${!slice ? 'active' : ''}`}>overview</a>
+      <a href="/bench/slice-a/" class={`bench-link ${slice === 'a' ? 'active' : ''}`}>A · competitive</a>
+      <a href="/bench/slice-b/" class={`bench-link ${slice === 'b' ? 'active' : ''}`}>B · efficiency</a>
+      <a href="/bench/slice-c/" class={`bench-link ${slice === 'c' ? 'active' : ''}`}>C · concurrency</a>
+      <a href="/bench/slice-d/" class={`bench-link ${slice === 'd' ? 'active' : ''}`}>D · co-residence</a>
+      <a href="/bench/slice-e/" class={`bench-link ${slice === 'e' ? 'active' : ''}`}>E · internals</a>
+    </nav>
+    <ThemeToggle />
+  </header>
+
+  <main class="bench-main">
+    <slot />
+  </main>
+
+  <footer class="site-footer">
+    <div>
+      <a href="https://github.com/skegdb">github.com/skegdb</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/skegdb/skeg/tree/main/bench-compare">harness source</a>
+      &nbsp;·&nbsp;
+      <a href="/">fleet status</a>
+    </div>
+    <div>frozen methodology · open data</div>
+  </footer>
+
+  <script is:inline>
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('#theme-toggle');
+      if (!btn) return;
+      var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      var next = current === 'dark' ? 'light' : 'dark';
+      if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      else document.documentElement.removeAttribute('data-theme');
+      try { localStorage.setItem('skegdb-theme', next); } catch (_) {}
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', next === 'dark' ? '#14130f' : '#f6f3ec');
+      // Re-trigger plotly relayout for theme-aware charts
+      document.querySelectorAll('[data-plotly-chart]').forEach(function(el){
+        var ev = new CustomEvent('skegdb-theme-changed', { detail: { theme: next } });
+        el.dispatchEvent(ev);
+      });
+    });
+  </script>
+
+  <style>
+    .bench-nav {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 20px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--bg-card);
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+    .bench-nav-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .bench-home { line-height: 0; border: none; flex-shrink: 0; }
+    .bench-nav-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--mute);
+      white-space: nowrap;
+    }
+    .bench-nav-links {
+      display: flex;
+      gap: 22px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .bench-link {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--mute);
+      border-bottom: 1px solid transparent;
+      padding-bottom: 2px;
+      white-space: nowrap;
+    }
+    .bench-link:hover { color: var(--fg); border-bottom-color: var(--rule); }
+    .bench-link.active { color: var(--fg); border-bottom-color: var(--fg); }
+    .bench-main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    /* Tablet: drop the eyebrow label, keep links + toggle. */
+    @media (max-width: 960px) {
+      .bench-nav { grid-template-columns: auto 1fr auto; gap: 14px; padding: 12px 18px; }
+      .bench-nav-title { display: none; }
+      .bench-nav-links { gap: 18px; }
+    }
+
+    /* Phone: full-width 2-row grid; logo+toggle row 1, links row 2 scrollable. */
+    @media (max-width: 640px) {
+      .bench-nav {
+        grid-template-columns: auto auto;
+        grid-template-rows: auto auto;
+        column-gap: 12px; row-gap: 10px;
+      }
+      .bench-nav-left { grid-column: 1; grid-row: 1; }
+      .theme-toggle, button.theme-toggle { grid-column: 2; grid-row: 1; justify-self: end; }
+      .bench-nav-links {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        gap: 14px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -18px;
+        padding: 4px 18px;
+        scrollbar-width: none;
+      }
+      .bench-nav-links::-webkit-scrollbar { display: none; }
+      .bench-link { font-size: 10px; letter-spacing: 0.10em; }
+    }
+  </style>
+</body>
+</html>

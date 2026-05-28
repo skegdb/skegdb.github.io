@@ -1,0 +1,476 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import MachineContext from '~/components/MachineContext.astro';
+import DataProvenance from '~/components/DataProvenance.astro';
+import sliceE from '~/data/bench/slice-e.json';
+
+const cells = (sliceE.cells || []) as any[];
+const tiers = (sliceE.tiers || []) as string[];
+
+// Friendly tier names
+const tierLabel: Record<string, string> = {
+  'int8': 'int8',
+  'pq:128:256': 'pq-128',
+  'turboquant-1': 'tq-1bit',
+  'turboquant-2': 'tq-2bit',
+  'turboquant-4': 'tq-4bit',
+};
+
+const tierPalette: Record<string, string> = {
+  'int8':         '#1b1b1b',
+  'pq:128:256':   '#2c6e9b',
+  'turboquant-4': '#5cad6b',
+  'turboquant-2': '#d4845c',
+  'turboquant-1': '#a04a7c',
+};
+const tierPaletteDark: Record<string, string> = {
+  'int8':         '#ece7d8',
+  'pq:128:256':   '#6fb3e3',
+  'turboquant-4': '#9bdda6',
+  'turboquant-2': '#f4a87c',
+  'turboquant-1': '#d990b9',
+};
+
+// Slice M-A: scaling matrix mxbai across tiers, default-ram only for charts
+const matrixCells = cells.filter(c => c.slice === 'M-A' && c.mode === 'default-ram' && c.distribution === 'mxbai');
+const matrixDatasets = ['mxbai-100k', 'mxbai-500k', 'mxbai-1m'];
+
+// Slice M-A: low-ram vs default-ram at 1M
+const ramCompare = cells.filter(c => c.slice === 'M-A' && c.dataset === 'mxbai-1m');
+
+const fmt = (v: any, d = 1) => (v == null || (typeof v === 'number' && isNaN(v))) ? '-' : (typeof v === 'number' ? v.toFixed(d) : String(v));
+const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toString();
+const fmtMib = (bytes: any) => bytes == null ? '-' : (bytes / 1024 / 1024).toFixed(1);
+---
+<BenchLayout title="slice E · internals · skegdb benchmarks"
+             description="skeg tier menu, low-ram mode, cold-start RSS"
+             slice="e">
+
+  <header class="bench-hero">
+    <p class="hero-eyebrow">slice E · skeg internals</p>
+    <h1>tier menu, low-ram mode, cold-start</h1>
+    <p class="hero-sub">
+      One engine, many configurations. Slice E sweeps skeg's compression tiers
+      (<code>int8</code>, <code>pq-128</code>,
+      <code>turboquant-{'{1,2,4}'}-bit</code>) at three scales, in both
+      <code>default-ram</code> and <code>low-ram</code> modes, and surfaces the
+      cold-start cost (first query RSS). Same corpus as slice A; here we look
+      <em>inside</em> the system instead of competing against others.
+    </p>
+  </header>
+
+  <MachineContext snapshot="slice-abc" fallback="slice-a" />
+
+  <DataProvenance
+    corpus="simple-wiki"
+    embedder="mxbai+minilm"
+    groundTruth="exact-bruteforce"
+    queries="1 000 hold-out passages (mxbai 1024d), separately re-embedded with all-MiniLM-L6-v2 (384d) for the minilm sub-slices."
+    notes="Slice E uses two embedders to validate that skeg's behaviour generalises across dimensionalities. The mxbai (1024d) result is the production-target story; the minilm (384d) replication confirms the tier menu holds at smaller dim too. M-A is the scaling matrix, M-D/M-E are embedder validations at 100K, M-F is the multi-tenant disjoint variant."
+  />
+
+  <BenchInsight kind="finding">
+    <p>
+      <strong>The tier choice is a recall/RAM/disk tradeoff</strong>:
+      <code>int8</code> keeps full-precision codes (best recall, biggest disk);
+      <code>pq-128</code> uses 128-byte product-quantized codes
+      (1024d × f32 → 128B, a 32× compression with recall@10 ≥ 0.999);
+      <code>turboquant-{'{1,2,4}'}</code> push further with k-bit
+      quantization · smaller still, recall holds remarkably.
+    </p>
+    <p>
+      <strong>Low-ram mode</strong> is skeg's M0 prototype goal: keep the
+      working set even smaller by leaning harder on SSD. The cells below
+      show what it costs in latency and what it saves in resident memory.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>RSS by tier and scale</h2>
+      <p class="bench-section-text">
+        Resident memory per tier as the corpus grows from 100K to 1M vectors,
+        in default-ram mode. The compression chosen at build time decides how
+        much RAM the engine wants for the index.
+      </p>
+    </div>
+    <div id="chart-rss" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>recall by tier and scale</h2>
+      <p class="bench-section-text">
+        recall@10 across the same matrix. Cheaper tiers do not collapse · the design is honest in this regime. Watch the gap close at higher
+        N where everything pulls into the 0.99+ band.
+      </p>
+    </div>
+    <div id="chart-recall" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cold start (first-query p99)</h2>
+      <p class="bench-section-text">
+        The latency the first user query pays · index pages still on SSD,
+        nothing warm. After this point queries hit warm pages. Lower means
+        the first response after a restart is closer to steady-state.
+      </p>
+    </div>
+    <div id="chart-coldstart" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tier menu at 1M · RSS vs recall</h2>
+      <p class="bench-section-text">
+        Each tier is one operating point. Lower-right = better (less RAM,
+        higher recall). <code>int8</code> sits at the high-fidelity corner
+        (best recall, biggest working set). <code>pq-128</code> and the
+        turboquant variants collapse to a third of the RAM, with a
+        moderate recall hit. The disk footprint is the same across tiers
+        · skeg keeps raw f32 vectors on SSD for re-rank regardless, so
+        what really changes between tiers is the in-RAM code table.
+      </p>
+    </div>
+    <div id="chart-tier-frontier" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>low-ram vs default-ram at 1M</h2>
+      <p class="bench-section-text">
+        Same tier, same dataset, two memory modes. Steady RSS, cold-start
+        RSS, and p99 latency · what does the M0 "low-ram" mode cost and
+        save?
+      </p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>tier</th>
+            <th>mode</th>
+            <th>RSS first-query MiB</th>
+            <th>RSS steady MiB</th>
+            <th>recall@10</th>
+            <th>p99 µs</th>
+            <th>qps</th>
+            <th>disk total MiB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ramCompare.sort((a: any, b: any) => a.tier.localeCompare(b.tier) || a.mode.localeCompare(b.mode)).map((r: any) => (
+            <tr>
+              <td>{tierLabel[r.tier] || r.tier}</td>
+              <td>{r.mode}</td>
+              <td class="num">{fmt(r.rss_first_query_mib, 1)}</td>
+              <td class="num">{fmt(r.rss_steady_mib, 1)}</td>
+              <td class="num">{fmt(r.recall_at_10, 4)}</td>
+              <td class="num">{fmtInt(r.query_p99_us)}</td>
+              <td class="num">{fmtInt(r.qps)}</td>
+              <td class="num">{fmtMib(r.disk_total_bytes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>all numbers</h2>
+      <p class="bench-section-text">Full matrix · click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="data-table">
+        <thead>
+          <tr>
+            <th>slice</th>
+            <th>dataset</th>
+            <th>distribution</th>
+            <th>tier</th>
+            <th>mode</th>
+            <th>concurrency</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 µs</th>
+            <th>p99 µs</th>
+            <th>qps</th>
+            <th>RSS steady MiB</th>
+            <th>RSS first MiB</th>
+            <th>disk total MiB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cells.sort((a: any, b: any) => a.slice.localeCompare(b.slice) || a.dataset.localeCompare(b.dataset) || a.tier.localeCompare(b.tier)).map((r: any) => (
+            <tr>
+              <td>{r.slice}</td>
+              <td>{r.dataset}</td>
+              <td>{r.distribution}</td>
+              <td>{tierLabel[r.tier] || r.tier}</td>
+              <td>{r.mode}</td>
+              <td class="num">{r.concurrency}</td>
+              <td class="num">{fmt(r.recall_at_10, 4)}</td>
+              <td class="num">{fmt(r.recall_at_100, 4)}</td>
+              <td class="num">{fmtInt(r.query_p50_us)}</td>
+              <td class="num">{fmtInt(r.query_p99_us)}</td>
+              <td class="num">{fmtInt(r.qps)}</td>
+              <td class="num">{fmt(r.rss_steady_mib, 1)}</td>
+              <td class="num">{fmt(r.rss_first_query_mib, 1)}</td>
+              <td class="num">{fmtMib(r.disk_total_bytes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-methodology">
+    <h2>methodology in one minute</h2>
+    <ul>
+      <li><strong>Engine</strong>: skeg only, sweeping its internal knobs.</li>
+      <li><strong>Tiers</strong>: <code>int8</code> (full-precision quantized vectors), <code>pq:128:256</code> (128-byte PQ codes, 256 centroids per subspace), <code>turboquant-{'{1,2,4}'}</code> (k-bit lattice quantization).</li>
+      <li><strong>Modes</strong>: <code>default-ram</code> (steady working set in RAM) vs <code>low-ram</code> (more pages live on SSD, paid on first query).</li>
+      <li><strong>Sub-slices</strong>: M-A scaling matrix (100K/500K/1M, mxbai), M-D / M-E embedder validation (minilm vs mxbai at 100K), M-F multi-tenant disjoint.</li>
+      <li><strong>Distributions</strong>: mxbai-embed-large 1024d (production target) and minilm-l6-v2 384d (smaller, replication check).</li>
+    </ul>
+  </section>
+
+  <script is:inline id="bench-data" type="application/json" set:html={JSON.stringify({ matrixCells, matrixDatasets, tiers, tierLabel, palette: tierPalette, paletteDark: tierPaletteDark })} />
+
+  <script is:inline>
+    (function () {
+      var dataEl = document.getElementById('bench-data');
+      if (!dataEl || !window.echarts) return;
+      var data;
+      try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+      function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+      function colors() {
+        var dark = isDark();
+        return { fg: dark ? '#ece7d8' : '#1b1b1b', mute: dark ? '#8f897a' : '#6b665d',
+                 rule: dark ? '#3a3830' : '#d6d1c4', axis: dark ? '#3a3830' : '#b9b2a0',
+                 bg: dark ? '#1c1b16' : '#ffffff' };
+      }
+      function paletteFor(tier) { return (isDark() ? data.paletteDark[tier] : data.palette[tier]) || '#999'; }
+
+      function baseOpts() {
+        var c = colors();
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700, animationEasing: 'cubicOut',
+          grid: { left: 70, right: 28, top: 24, bottom: 70, containLabel: true },
+          legend: {
+            bottom: 0, textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            trigger: 'axis',
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            padding: [8, 12], extraCssText: 'box-shadow: 0 4px 24px rgba(0,0,0,0.18); border-radius: 0;',
+          },
+          xAxis: {
+            type: 'category', data: data.matrixDatasets,
+            axisLine: { lineStyle: { color: c.axis } },
+            axisTick: { lineStyle: { color: c.axis } },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+          },
+          yAxis: {
+            type: 'value',
+            axisLine: { show: false }, axisTick: { show: false },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+            splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          },
+        };
+      }
+
+      function pivotTier(metric) {
+        return data.tiers.map(function (tier) {
+          var values = data.matrixDatasets.map(function (ds) {
+            var row = data.matrixCells.find(function (c) { return c.tier === tier && c.dataset === ds; });
+            return row ? row[metric] ?? null : null;
+          });
+          return { tier: tier, values: values };
+        });
+      }
+      function barSeries(metric) {
+        return pivotTier(metric).map(function (row) {
+          return {
+            name: data.tierLabel[row.tier] || row.tier, type: 'bar', barMaxWidth: 24,
+            itemStyle: { color: paletteFor(row.tier), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' }, data: row.values,
+          };
+        });
+      }
+      function lineSeries(metric) {
+        return pivotTier(metric).map(function (row) {
+          return {
+            name: data.tierLabel[row.tier] || row.tier, type: 'line', smooth: true,
+            symbol: 'circle', symbolSize: 9,
+            itemStyle: { color: paletteFor(row.tier) },
+            lineStyle: { color: paletteFor(row.tier), width: 2.5 },
+            emphasis: { focus: 'series', scale: 1.6 }, data: row.values,
+          };
+        });
+      }
+      function chart(id, build) {
+        var el = document.getElementById(id); if (!el) return null;
+        var inst = window.echarts.init(el, null, { renderer: 'svg' });
+        inst.setOption(build());
+        return inst;
+      }
+
+      function rssOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'log',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1024 ? (v/1024).toFixed(1) + ' GiB' : v + ' MiB'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'RSS steady · log', nameLocation: 'middle', nameGap: 70,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = barSeries('rss_steady_mib');
+        return opts;
+      }
+      function recallOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'value', min: 0.7, max: 1.0,
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v.toFixed(2); } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'recall @ 10', nameLocation: 'middle', nameGap: 50,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = lineSeries('recall_at_10');
+        return opts;
+      }
+      function coldStartOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        opts.yAxis = {
+          type: 'log',
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1000 ? (v/1000).toFixed(0) + ' ms' : v + ' µs'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'first query p99 · log', nameLocation: 'middle', nameGap: 60,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = lineSeries('first_query_p99_us');
+        return opts;
+      }
+      function tierFrontierOptions() {
+        var c = colors();
+        var opts = baseOpts();
+        // One point per tier at 1M: x = RSS steady, y = recall@10
+        var rowsByTier = {};
+        data.matrixCells.forEach(function (r) {
+          if (r.dataset === 'mxbai-1m') rowsByTier[r.tier] = r;
+        });
+        opts.tooltip.trigger = 'item';
+        opts.tooltip.formatter = function (p) {
+          var d = p.data;
+          return '<b>' + d[2] + '</b><br>' +
+                 'RSS steady ' + Math.round(d[0]) + ' MiB<br>' +
+                 'recall@10  ' + d[1].toFixed(4) + '<br>' +
+                 'p99        ' + Math.round(d[3]) + ' µs<br>' +
+                 'qps        ' + Math.round(d[4]);
+        };
+        opts.xAxis = {
+          type: 'log',
+          name: 'RSS steady · MiB · log', nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v >= 1024 ? (v/1024).toFixed(1) + ' GiB' : v + ' MiB'; } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.yAxis = {
+          type: 'value', min: 0.95, max: 1.0,
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: function(v){ return v.toFixed(3); } },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: 'recall @ 10', nameLocation: 'middle', nameGap: 50,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+        opts.series = data.tiers.map(function (tier) {
+          var r = rowsByTier[tier];
+          if (!r) return { name: data.tierLabel[tier] || tier, type: 'scatter', data: [] };
+          return {
+            name: data.tierLabel[tier] || tier,
+            type: 'scatter', symbol: 'circle', symbolSize: 22,
+            itemStyle: {
+              color: paletteFor(tier), borderColor: c.bg, borderWidth: 2,
+              shadowBlur: 8, shadowColor: paletteFor(tier) + '66',
+            },
+            emphasis: { focus: 'series', scale: 1.3 },
+            label: {
+              show: true, position: 'right', offset: [8, 0],
+              color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11,
+              formatter: data.tierLabel[tier] || tier,
+            },
+            data: [[r.rss_steady_mib, r.recall_at_10, data.tierLabel[tier] || tier, r.query_p99_us, r.qps]],
+            z: 3,
+          };
+        });
+        return opts;
+      }
+
+      var charts = {
+        rss:           chart('chart-rss', rssOptions),
+        recall:        chart('chart-recall', recallOptions),
+        coldstart:     chart('chart-coldstart', coldStartOptions),
+        tierFrontier:  chart('chart-tier-frontier', tierFrontierOptions),
+      };
+      function reRender() {
+        if (charts.rss)          charts.rss.setOption(rssOptions(), true);
+        if (charts.recall)       charts.recall.setOption(recallOptions(), true);
+        if (charts.coldstart)    charts.coldstart.setOption(coldStartOptions(), true);
+        if (charts.tierFrontier) charts.tierFrontier.setOption(tierFrontierOptions(), true);
+      }
+      window.addEventListener('resize', function () {
+        Object.values(charts).forEach(function (c) { if (c) c.resize(); });
+      });
+      document.querySelectorAll('[data-chart]').forEach(function (el) {
+        el.addEventListener('skegdb-theme-changed', reRender);
+      });
+
+      function trySort(headerEl) {
+        var tbody = document.querySelector('#data-table tbody');
+        var headers = Array.from(document.querySelectorAll('#data-table th'));
+        var idx = headers.indexOf(headerEl);
+        var asc = headerEl.dataset.dir !== 'asc';
+        headers.forEach(function (h) { h.dataset.dir = ''; h.classList.remove('sorted', 'asc'); });
+        headerEl.dataset.dir = asc ? 'asc' : 'desc';
+        headerEl.classList.add('sorted', asc ? 'asc' : 'desc');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+          var aa = a.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var bb = b.children[idx].textContent.trim().replace(/[,µ]/g, '');
+          var an = parseFloat(aa), bn = parseFloat(bb);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      }
+      document.querySelectorAll('#data-table th').forEach(function (th) {
+        th.addEventListener('click', function () { trySort(th); });
+      });
+    })();
+  </script>
+
+  <style>
+    .bench-hero { margin-bottom: 16px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--fg); max-width: 720px; font-size: 15px; line-height: 1.6; }
+    .hero-sub code { background: var(--bg-pill); padding: 1px 6px; font-size: 13px; }
+  </style>
+</BenchLayout>

@@ -192,3 +192,120 @@ footer.site-footer a:hover { color: var(--fg); border-bottom-color: var(--fg); }
   letter-spacing: 0.18em;
   color: var(--mute);
 }
+
+/* ── Shared bench-section panel + table ─────────────────────── */
+.bench-section {
+  margin: 28px 0;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+}
+.bench-section-head { margin-bottom: 16px; }
+.bench-section h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+.bench-section-text {
+  margin: 0;
+  color: var(--mute);
+  font-size: 13px;
+  max-width: 640px;
+  line-height: 1.55;
+}
+.bench-chart {
+  width: 100%;
+  height: 420px;
+}
+.bench-table-wrap { overflow-x: auto; }
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.bench-table th,
+.bench-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  white-space: nowrap;
+}
+.bench-table th {
+  font-weight: 500;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+}
+.bench-table th:hover { color: var(--fg); }
+.bench-table th.sorted { color: var(--fg); }
+.bench-table th.sorted::after { content: ' ▾'; }
+.bench-table th.sorted.asc::after { content: ' ▴'; }
+.bench-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bench-table tbody tr:hover { background: var(--bg-pill); }
+
+/* Engine palette · distinct per skeg variant, kept consistent across all
+   slice pages and reused as inline style for ECharts series. */
+.engine-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.engine-skeg-int8   { background: #1b1b1b; }
+.engine-skeg-pq128  { background: #2c6e9b; }
+.engine-qdrant-hnsw { background: #7a5cd4; }
+.engine-qdrant-pq   { background: #a48bfb; }
+.engine-qdrant-sq   { background: #5c4096; }
+.engine-chroma-hnsw { background: #d4845c; }
+
+.engine-skeg     { background: #1b1b1b; }
+.engine-qdrant   { background: #7a5cd4; }
+.engine-chroma   { background: #d4845c; }
+.engine-baseline { background: #8f897a; }
+
+:root[data-theme='dark'] .engine-skeg-int8   { background: #ece7d8; }
+:root[data-theme='dark'] .engine-skeg-pq128  { background: #6fb3e3; }
+:root[data-theme='dark'] .engine-qdrant-hnsw { background: #a48bfb; }
+:root[data-theme='dark'] .engine-qdrant-pq   { background: #c6b4ff; }
+:root[data-theme='dark'] .engine-qdrant-sq   { background: #826ec0; }
+:root[data-theme='dark'] .engine-chroma-hnsw { background: #f4a87c; }
+:root[data-theme='dark'] .engine-skeg        { background: #ece7d8; }
+:root[data-theme='dark'] .engine-qdrant      { background: #a48bfb; }
+:root[data-theme='dark'] .engine-chroma      { background: #f4a87c; }
+:root[data-theme='dark'] .engine-baseline    { background: #8f897a; }
+
+.bench-methodology {
+  margin: 28px 0;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+}
+.bench-methodology h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 500;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.bench-methodology ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  line-height: 1.7;
+  color: var(--mute);
+  font-size: 13px;
+}
+.bench-methodology li strong { color: var(--fg); font-weight: 500; }
+.bench-methodology p { margin: 0; font-size: 13px; color: var(--mute); }
+.bench-methodology a { color: var(--fg); }

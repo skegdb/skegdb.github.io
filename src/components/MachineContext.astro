@@ -1,0 +1,74 @@
+---
+import machineData from '~/data/bench/machine.json';
+
+interface Props {
+  /** Slice key, e.g. "slice-a", "slice-ab", "slice-abc", "slice-d". */
+  snapshot?: string;
+  /** Override for runs that don't have their own machine_info file. */
+  fallback?: string;
+}
+const { snapshot, fallback = 'slice-a' } = Astro.props;
+const lookup: any = machineData;
+const m = lookup[snapshot ?? ''] ?? lookup[fallback] ?? lookup['default'] ?? null;
+---
+{m && (
+  <aside class="machine-ctx">
+    <span class="machine-ctx-label">machine</span>
+    <span class="machine-ctx-line">
+      <strong>{m.cpu_brand || m.model}</strong>
+      {m.perf_cores && <span>· {m.perf_cores}P+{m.eff_cores ?? 0}E cores</span>}
+      {m.ram_gib && <span>· {m.ram_gib} GiB</span>}
+      {m.os_product && <span>· {m.os_product} {m.os_version ?? ''}</span>}
+    </span>
+    <span class="machine-ctx-line">
+      <span class="machine-ctx-label-inline">skeg</span>
+      {m.skeg_release && <span>{m.skeg_release}</span>}
+      {m.skeg_git_commit && <code>{m.skeg_git_commit}</code>}
+      {m.rustc && <span>· rustc {m.rustc}</span>}
+      {m.numpy && <span>· numpy {m.numpy}</span>}
+      {m.chromadb && <span>· chromadb {m.chromadb}</span>}
+    </span>
+  </aside>
+)}
+
+<style>
+  .machine-ctx {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 18px;
+    background: var(--bg-pill);
+    border-left: 3px solid var(--rule);
+    margin: 16px 0 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .machine-ctx-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--mute);
+  }
+  .machine-ctx-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+    color: var(--fg);
+  }
+  .machine-ctx-line strong { font-weight: 600; }
+  .machine-ctx-line span:not(.machine-ctx-label-inline) { color: var(--fg); }
+  .machine-ctx-label-inline {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--mute);
+  }
+  .machine-ctx code {
+    background: transparent;
+    border: 1px solid var(--rule);
+    padding: 0 6px;
+    font-size: 11px;
+    color: var(--fg);
+  }
+</style>
