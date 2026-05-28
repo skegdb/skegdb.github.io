@@ -64,16 +64,18 @@ const {
     <slot />
   </main>
 
-  <footer class="site-footer">
-    <div>
-      <a href="https://github.com/skegdb">github.com/skegdb</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/skegdb/skeg/tree/main/bench-compare">harness source</a>
-      &nbsp;·&nbsp;
-      <a href="/">fleet status</a>
-    </div>
-    <div>frozen methodology · open data</div>
-  </footer>
+  <div class="bench-footer-wrap">
+    <footer class="site-footer">
+      <div>
+        <a href="/">fleet status</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/skegdb">github.com/skegdb</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/skegdb/skegdb.github.io">site source</a>
+      </div>
+      <div>frozen methodology · open data</div>
+    </footer>
+  </div>
 
   <script is:inline>
     document.addEventListener('click', function (e) {
@@ -139,6 +141,11 @@ const {
       max-width: 1180px;
       margin: 0 auto;
       padding: 32px 24px 64px;
+    }
+    .bench-footer-wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px 32px;
     }
 
     /* Tablet: drop the eyebrow label, keep links + toggle. */
