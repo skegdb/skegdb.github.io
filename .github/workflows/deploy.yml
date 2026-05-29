@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Snapshot pushes the refreshed JSONL with GITHUB_TOKEN, which by GH
+  # Actions policy does NOT trigger downstream `push` workflows (loop
+  # protection). So Pages would stay frozen on the last human-pushed
+  # build between snapshots. Listen for Snapshot completion explicitly
+  # so each hourly refresh redeploys.
+  workflow_run:
+    workflows: [Snapshot]
+    types: [completed]
 
 permissions:
   contents: read
