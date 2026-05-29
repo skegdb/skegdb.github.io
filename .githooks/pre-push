@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Pre-push gate: prettier + astro/tsc + npm test. Skip with SKIP_PREPUSH=1.
+set -euo pipefail
+[[ "${SKIP_PREPUSH:-0}" == "1" ]] && { echo "pre-push: skipped" >&2; exit 0; }
+[[ -f package.json ]] || exit 0
+step() { printf "\n\033[1;36m▸ pre-push: %s\033[0m\n" "$1" >&2; }
+fail() { printf "\n\033[1;31m✗ pre-push failed at: %s\033[0m\n" "$1" >&2; exit 1; }
+if grep -q '"format":' package.json 2>/dev/null; then
+    step "npm run format -- --check"
+    npm run format -- --check || fail "format"
+elif [[ -f .prettierrc ]] || [[ -f .prettierrc.json ]] || [[ -f prettier.config.js ]]; then
+    step "npx prettier --check ."
+    npx prettier --check . || fail "prettier"
+fi
+if [[ -f astro.config.mjs ]] || [[ -f astro.config.ts ]]; then
+    step "npx astro check"
+    npx astro check || fail "astro check"
+elif [[ -f tsconfig.json ]]; then
+    step "npx tsc --noEmit"
+    npx tsc --noEmit || fail "tsc"
+fi
+if grep -q '"test":' package.json 2>/dev/null && ! grep -q '"test":[[:space:]]*"echo' package.json; then
+    step "npm test"
+    npm test || fail "npm test"
+fi
+printf "\n\033[1;32m✓ pre-push gate passed\033[0m\n" >&2
