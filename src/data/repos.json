@@ -14,7 +14,9 @@
           { "name": "skeg-platform", "kind": "library" },
           { "name": "skeg-simd", "kind": "library" },
           { "name": "skeg-vector", "kind": "library" },
-          { "name": "skeg-resp3", "kind": "library" }
+          { "name": "skeg-resp3", "kind": "library" },
+          { "name": "skeg-telemetry", "kind": "library" },
+          { "name": "skeg-server", "kind": "library" }
         ],
         "brew": { "tap": "skegdb/tap", "formula": "skeg" }
       },
