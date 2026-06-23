@@ -80,40 +80,14 @@ const chartData = {
     notes="0.5 reference numbers from <code>skeg-bench/RESULTS.md</code> plus the tq2-vs-int8 default-tier gate across dimensionalities. Single-machine Apple Silicon (M1). RAM ratios are hardware-independent; absolute latencies and build times are not. Recall is against exact brute-force cosine ground truth; RAM via <code>ps -o rss</code>."
   />
 
-  <!-- ============ 1. tq2 is the new default ============ -->
-  <section class="bench-section">
-    <div class="bench-section-head">
-      <h2>tq2 is the new default · the gate across dimensionalities</h2>
-      <p class="bench-section-text">
-        Before promoting <code>tq2</code> to the default tier we gated it
-        against the old <code>int8</code> default on three datasets spanning
-        100d to 784d. Recall is neutral (within noise everywhere) and RAM is
-        equal-or-leaner, with the win growing at higher dimensionality (mnist
-        784d: 168 vs 197 MB). The bars below are serve RAM per tier and
-        dataset · lower is better.
-      </p>
-    </div>
-    <div id="chart-gate-ram" data-chart class="bench-chart"></div>
-  </section>
-
-  <section class="bench-section">
-    <div class="bench-section-head">
-      <h2>tq2 gate · recall@10 holds</h2>
-      <p class="bench-section-text">
-        recall@10 for the same gate. The two tiers track each other across all
-        three distributions · tq2 never drops below 0.999.
-      </p>
-    </div>
-    <div id="chart-gate-recall" data-chart class="bench-chart"></div>
-  </section>
-
+  <!-- ============ 1. cross-engine competitive ============ -->
   <section class="bench-section">
     <div class="bench-section-head">
       <h2>cross-engine · serve RAM at 100K (mxbai-1024)</h2>
       <p class="bench-section-text">
         Every engine at a reasonable default config on the same corpus. skeg-tq2
         is the single point that is simultaneously leanest, most accurate, and
-        fast. Bars are serve RAM (MB, log) · lower is better; hover for recall
+        fast. Bars are serve RAM (MB) · lower is better; hover for recall
         and latency.
       </p>
     </div>
@@ -397,6 +371,37 @@ const chartData = {
         </tbody>
       </table>
     </div>
+  </section>
+
+  <!-- ============ tier internals: why tq2 is the default ============ -->
+  <BenchInsight kind="context" label="why tq2 is the default">
+    <p>
+      <strong>The internal gate behind the tq2 promotion.</strong> Before making
+      tq2 the default tier we gated it against the old int8 default on three
+      datasets spanning 100d to 784d. Recall is neutral (within noise) and RAM is
+      equal-or-leaner, the win growing at higher dimensionality (mnist 784d: 168
+      vs 197 MB). This is skeg-vs-skeg validation; the competitive picture is the
+      cross-engine charts above.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tq2 gate · serve RAM (skeg int8 vs tq2)</h2>
+      <p class="bench-section-text">serve RAM per tier and dataset · lower is better.</p>
+    </div>
+    <div id="chart-gate-ram" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tq2 gate · recall@10 holds</h2>
+      <p class="bench-section-text">
+        recall@10 for the same gate. The two tiers track each other across all
+        three distributions · tq2 never drops below 0.999.
+      </p>
+    </div>
+    <div id="chart-gate-recall" data-chart class="bench-chart"></div>
   </section>
 
   <!-- ============ 5. Cold-start bulkhead ============ -->
