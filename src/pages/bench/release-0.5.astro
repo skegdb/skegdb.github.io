@@ -107,35 +107,42 @@ const chartData = {
 
   <section class="bench-section">
     <div class="bench-section-head">
-      <h2>cross-engine numbers · mxbai-1024 @ 100K</h2>
-      <p class="bench-section-text">Click headers to sort.</p>
+      <h2>cross-engine · recall@10 at 100K</h2>
+      <p class="bench-section-text">
+        Same six engines, recall@10 against exact brute force (y zoomed to
+        0.90-1.00 so the gaps read). skeg-tq2 tops the chart at the least RAM.
+      </p>
     </div>
-    <div class="bench-table-wrap">
-      <table class="bench-table" id="cross-table">
-        <thead>
-          <tr>
-            <th>engine</th>
-            <th>serve RAM MB</th>
-            <th>recall@10</th>
-            <th>recall@100</th>
-            <th>p50 ms</th>
-            <th>p95 ms</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cross100k.cells.map((r: any) => (
+    <div id="chart-cross-recall" data-chart class="bench-chart"></div>
+    <details class="bench-details">
+      <summary>all numbers · mxbai-1024 @ 100K (click headers to sort)</summary>
+      <div class="bench-table-wrap">
+        <table class="bench-table" id="cross-table">
+          <thead>
             <tr>
-              <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
-              <td class="num">{fmtInt(r.serve_ram_mb)}</td>
-              <td class="num">{fmt(r['recall@10'], 3)}</td>
-              <td class="num">{fmt(r['recall@100'], 3)}</td>
-              <td class="num">{fmt(r.p50_ms, 2)}</td>
-              <td class="num">{fmt(r.p95_ms, 2)}</td>
+              <th>engine</th>
+              <th>serve RAM MB</th>
+              <th>recall@10</th>
+              <th>recall@100</th>
+              <th>p50 ms</th>
+              <th>p95 ms</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {cross100k.cells.map((r: any) => (
+              <tr>
+                <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
+                <td class="num">{fmtInt(r.serve_ram_mb)}</td>
+                <td class="num">{fmt(r['recall@10'], 3)}</td>
+                <td class="num">{fmt(r['recall@100'], 3)}</td>
+                <td class="num">{fmt(r.p50_ms, 2)}</td>
+                <td class="num">{fmt(r.p95_ms, 2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   </section>
 
   <BenchInsight kind="context">
@@ -155,30 +162,34 @@ const chartData = {
         raising it trades latency for recall but not the RAM gap.
       </p>
     </div>
-    <div class="bench-table-wrap">
-      <table class="bench-table" id="glove-table">
-        <thead>
-          <tr>
-            <th>engine</th>
-            <th>serve RAM MB</th>
-            <th>recall@10</th>
-            <th>recall@100</th>
-            <th>p50 ms</th>
-          </tr>
-        </thead>
-        <tbody>
-          {crossGlove.cells.map((r: any) => (
+    <div id="chart-glove-ram" data-chart class="bench-chart"></div>
+    <details class="bench-details">
+      <summary>all numbers · GloVe-100 @ 500K</summary>
+      <div class="bench-table-wrap">
+        <table class="bench-table" id="glove-table">
+          <thead>
             <tr>
-              <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
-              <td class="num">{fmtInt(r.serve_ram_mb)}</td>
-              <td class="num">{fmt(r['recall@10'], 3)}</td>
-              <td class="num">{fmt(r['recall@100'], 3)}</td>
-              <td class="num">{fmt(r.p50_ms, 1)}</td>
+              <th>engine</th>
+              <th>serve RAM MB</th>
+              <th>recall@10</th>
+              <th>recall@100</th>
+              <th>p50 ms</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {crossGlove.cells.map((r: any) => (
+              <tr>
+                <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
+                <td class="num">{fmtInt(r.serve_ram_mb)}</td>
+                <td class="num">{fmt(r['recall@10'], 3)}</td>
+                <td class="num">{fmt(r['recall@100'], 3)}</td>
+                <td class="num">{fmt(r.p50_ms, 1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   </section>
 
   <!-- ============ 2. Multi-tenant wedge ============ -->
@@ -196,8 +207,8 @@ const chartData = {
     <div class="bench-section-head">
       <h2>multi-tenant density · 5 tenants x 100K</h2>
       <p class="bench-section-text">
-        Peak RAM for five tenants of 100K vectors each. Bars are peak RAM (MB,
-        log) · lower is better; hover for recall and leak count.
+        Peak RAM for five tenants of 100K vectors each. Bars are peak RAM (MB)
+        · lower is better; hover for recall and leak count.
       </p>
     </div>
     <div id="chart-density" data-chart class="bench-chart"></div>
@@ -212,30 +223,34 @@ const chartData = {
         at higher recall, with 0 measured leaks.
       </p>
     </div>
-    <div class="bench-table-wrap">
-      <table class="bench-table">
-        <thead>
-          <tr>
-            <th>config</th>
-            <th>peak RAM MB</th>
-            <th>serve RSS MB</th>
-            <th>recall</th>
-            <th>leaks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sharedFilter.cells.map((r: any) => (
+    <div id="chart-shared-filter" data-chart class="bench-chart"></div>
+    <details class="bench-details">
+      <summary>all numbers · shared index + per-tenant filter</summary>
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
             <tr>
-              <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
-              <td class="num">{fmtInt(r.peak_ram_mb)}</td>
-              <td class="num">{fmtInt(r.serve_rss_mb)}</td>
-              <td class="num">{fmt(r.recall, 3)}</td>
-              <td class="num">{r.leaks}</td>
+              <th>config</th>
+              <th>peak RAM MB</th>
+              <th>serve RSS MB</th>
+              <th>recall</th>
+              <th>leaks</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {sharedFilter.cells.map((r: any) => (
+              <tr>
+                <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
+                <td class="num">{fmtInt(r.peak_ram_mb)}</td>
+                <td class="num">{fmtInt(r.serve_rss_mb)}</td>
+                <td class="num">{fmt(r.recall, 3)}</td>
+                <td class="num">{r.leaks}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   </section>
 
   <section class="bench-section">
@@ -290,30 +305,34 @@ const chartData = {
         quantization collapses to 0.914.
       </p>
     </div>
-    <div class="bench-table-wrap">
-      <table class="bench-table">
-        <thead>
-          <tr>
-            <th>config</th>
-            <th>peak RAM MB</th>
-            <th>recall@10</th>
-            <th>recall@100</th>
-            <th>p50 ms</th>
-          </tr>
-        </thead>
-        <tbody>
-          {mnistTiers.cells.map((r: any) => (
+    <div id="chart-mnist-ram" data-chart class="bench-chart"></div>
+    <details class="bench-details">
+      <summary>all numbers · MNIST 60K tiers</summary>
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
             <tr>
-              <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
-              <td class="num">{fmtInt(r.peak_ram_mb)}</td>
-              <td class="num">{fmt(r['recall@10'], 3)}</td>
-              <td class="num">{fmt(r['recall@100'], 3)}</td>
-              <td class="num">{fmt(r.p50_ms, 2)}</td>
+              <th>config</th>
+              <th>peak RAM MB</th>
+              <th>recall@10</th>
+              <th>recall@100</th>
+              <th>p50 ms</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {mnistTiers.cells.map((r: any) => (
+              <tr>
+                <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
+                <td class="num">{fmtInt(r.peak_ram_mb)}</td>
+                <td class="num">{fmt(r['recall@10'], 3)}</td>
+                <td class="num">{fmt(r['recall@100'], 3)}</td>
+                <td class="num">{fmt(r.p50_ms, 2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   </section>
 
   <section class="bench-section">
@@ -607,6 +626,8 @@ const chartData = {
         var opts = baseOpts(cats);
         opts.legend.show = false;
         opts.yAxis = yAxisFor(c, spec.type || 'value', spec.name, spec.gap, spec.fmt);
+        if (spec.yMin != null) opts.yAxis.min = spec.yMin;
+        if (spec.yMax != null) opts.yAxis.max = spec.yMax;
         if (spec.tooltipFmt) opts.tooltip.formatter = spec.tooltipFmt;
         var serie = {
           type: 'bar', barMaxWidth: 46,
@@ -788,17 +809,70 @@ const chartData = {
         return opts;
       }
 
+      // cross-engine recall@10 at 100K (bars, zoomed y so the gaps read)
+      function crossRecallOptions() {
+        return engineBarOptions({
+          cells: D.cross100k.cells, keyField: 'engine', labelField: 'engine',
+          valField: 'recall@10', name: 'recall @ 10', gap: 50, type: 'value',
+          yMin: 0.9, yMax: 1.0, fmt: function (v) { return v.toFixed(3); },
+        });
+      }
+      // GloVe-100 @500K serve RAM (cross-engine bars)
+      function gloveRamOptions() {
+        return engineBarOptions({
+          cells: D.crossGlove.cells, keyField: 'engine', labelField: 'engine',
+          valField: 'serve_ram_mb', name: 'serve RAM MB', gap: 55, type: 'value', fmt: mbFmt,
+          tooltipFmt: function (p) {
+            var r = D.crossGlove.cells.find(function (x) { return x.engine === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.engine + '</b><br>serve RAM ' + r.serve_ram_mb + ' MB<br>' +
+                   'recall@10 ' + r['recall@10'].toFixed(3);
+          },
+        });
+      }
+      // shared index + per-tenant filter, serve RSS (skeg vs qdrant)
+      function sharedFilterOptions() {
+        return engineBarOptions({
+          cells: D.sharedFilter.cells, keyField: 'key', labelField: 'config',
+          valField: 'serve_rss_mb', name: 'serve RSS MB', gap: 55, type: 'value', fmt: mbFmt,
+          tooltipFmt: function (p) {
+            var r = D.sharedFilter.cells.find(function (x) { return x.config === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.config + '</b><br>serve RSS ' + r.serve_rss_mb + ' MB<br>' +
+                   'peak ' + r.peak_ram_mb + ' MB<br>recall ' + r.recall.toFixed(3) + '<br>leaks ' + r.leaks;
+          },
+        });
+      }
+      // MNIST 60K tiers peak RAM (skeg-tq2 vs qdrant f32/int8)
+      function mnistRamOptions() {
+        return engineBarOptions({
+          cells: D.mnistTiers.cells, keyField: 'key', labelField: 'config',
+          valField: 'peak_ram_mb', name: 'peak RAM MB', gap: 50, type: 'value',
+          fmt: function (v) { return v + ' MB'; },
+          tooltipFmt: function (p) {
+            var r = D.mnistTiers.cells.find(function (x) { return x.config === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.config + '</b><br>peak RAM ' + r.peak_ram_mb + ' MB<br>' +
+                   'recall@10 ' + r['recall@10'].toFixed(3);
+          },
+        });
+      }
+
       var builders = {
-        'chart-gate-ram':       gateRamOptions,
-        'chart-gate-recall':    gateRecallOptions,
         'chart-cross-ram':      crossRamOptions,
+        'chart-cross-recall':   crossRecallOptions,
         'chart-cross-frontier': crossFrontierOptions,
+        'chart-glove-ram':      gloveRamOptions,
         'chart-density':        densityOptions,
+        'chart-shared-filter':  sharedFilterOptions,
         'chart-container':      containerOptions,
+        'chart-mnist-ram':      mnistRamOptions,
         'chart-cost':           costOptions,
         'chart-scaling-ram':    scalingRamOptions,
         'chart-latency':        latencyOptions,
         'chart-throughput':     throughputOptions,
+        'chart-gate-ram':       gateRamOptions,
+        'chart-gate-recall':    gateRecallOptions,
       };
 
       var charts = {};
@@ -874,5 +948,17 @@ const chartData = {
     }
     .iv-v { font-family: var(--mono); font-size: 18px; color: var(--fg); }
     .iv-v.iv-pass { color: var(--ok); }
+
+    .bench-details { margin-top: 10px; }
+    .bench-details > summary {
+      cursor: pointer; list-style: none;
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.12em; color: var(--mute); padding: 6px 0;
+      border-top: 1px solid var(--rule);
+    }
+    .bench-details > summary::-webkit-details-marker { display: none; }
+    .bench-details > summary::before { content: '+ '; }
+    .bench-details[open] > summary::before { content: '- '; }
+    .bench-details > summary:hover { color: var(--fg); }
   </style>
 </BenchLayout>
