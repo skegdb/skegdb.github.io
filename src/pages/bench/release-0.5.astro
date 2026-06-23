@@ -18,6 +18,8 @@ const latency       = data.latencyUnderLoad as any;
 const throughput    = data.throughput as any;
 const cost          = data.cost as any;
 const coldStart     = data.coldStartBulkhead as any;
+const scalingCurve  = data.scalingCurve as any;
+const throughputCurve = data.throughputCurve as any;
 
 const palette     = data.palette as Record<string, string>;
 const paletteDark = data.paletteDark as Record<string, string>;
@@ -29,6 +31,7 @@ const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toLocal
 const chartData = {
   cross100k, crossGlove, tq2Gate, scaling500k, density, sharedFilter,
   container, mnistTiers, latency, throughput, cost, coldStart,
+  scalingCurve, throughputCurve,
   palette, paletteDark,
 };
 ---
@@ -145,6 +148,19 @@ const chartData = {
     </details>
   </section>
 
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cross-engine · query latency at 100K</h2>
+      <p class="bench-section-text">
+        p50 and p95 query latency, same six engines. skeg-tq2 is competitive with
+        the in-RAM HNSW engines (lower is better); LanceDB's IVF-PQ pays a large
+        latency cost. Honest read: skeg is not the single fastest, it is the only
+        one this lean and accurate at competitive latency.
+      </p>
+    </div>
+    <div id="chart-cross-latency" data-chart class="bench-chart"></div>
+  </section>
+
   <BenchInsight kind="context">
     <p>
       <strong>The hard-distribution check.</strong> On GloVe-100-angular at 500K
@@ -163,6 +179,7 @@ const chartData = {
       </p>
     </div>
     <div id="chart-glove-ram" data-chart class="bench-chart"></div>
+    <div id="chart-glove-recall" data-chart class="bench-chart"></div>
     <details class="bench-details">
       <summary>all numbers · GloVe-100 @ 500K</summary>
       <div class="bench-table-wrap">
@@ -350,12 +367,22 @@ const chartData = {
   <!-- ============ 4. Single-tenant scaling tiers ============ -->
   <section class="bench-section">
     <div class="bench-section-head">
-      <h2>single-tenant scaling · mxbai-1024 @ 500K</h2>
+      <h2>serve RSS vs corpus size · skeg stays flat</h2>
       <p class="bench-section-text">
-        Peak RAM during build, recall, and latency at 500K across skeg's tiers
-        vs Qdrant. Peak is the stable, quotable number; steady serve RSS is far
-        lower still (skeg 76-198 MB vs qdrant 2331-2563 MB). Bars are peak RAM
-        (MB, log) · lower is better.
+        Steady serve RSS as the corpus grows 100K to 500K. skeg-tq2 stays flat
+        (the working set is on SSD, only hot pages resident); both Qdrant configs
+        climb roughly linearly into the GiB. This is the architecture, not tuning.
+      </p>
+    </div>
+    <div id="chart-scaling-curve" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>single-tenant scaling · peak RAM @ 500K</h2>
+      <p class="bench-section-text">
+        Peak RAM during build at 500K across skeg's tiers vs Qdrant. Peak is the
+        stable, quotable number. Bars are peak RAM (MB) · lower is better.
       </p>
     </div>
     <div id="chart-scaling-ram" data-chart class="bench-chart"></div>
@@ -858,19 +885,86 @@ const chartData = {
         });
       }
 
+      // cross-engine latency p50/p95 at 100K (grouped bars)
+      function crossLatencyOptions() {
+        var c = colors();
+        var cats = D.cross100k.cells.map(function (r) { return r.engine; });
+        var opts = baseOpts(cats);
+        opts.yAxis = yAxisFor(c, 'value', 'latency ms', 50, function (v) { return v + ' ms'; });
+        function ser(name, field, key) {
+          return {
+            name: name, type: 'bar', barMaxWidth: 22,
+            itemStyle: { color: paletteFor(key), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' },
+            data: D.cross100k.cells.map(function (r) { return r[field]; }),
+          };
+        }
+        opts.series = [ser('p50', 'p50_ms', 'skeg-tq2'), ser('p95', 'p95_ms', 'qdrant-f32')];
+        return opts;
+      }
+      // GloVe-100 recall@10 (bars, zoomed so the hard-distribution gaps read)
+      function gloveRecallOptions() {
+        return engineBarOptions({
+          cells: D.crossGlove.cells, keyField: 'engine', labelField: 'engine',
+          valField: 'recall@10', name: 'recall @ 10', gap: 50, type: 'value',
+          yMin: 0.7, yMax: 1.0, fmt: function (v) { return v.toFixed(3); },
+        });
+      }
+      // serve RSS vs corpus size (line: skeg flat, qdrant climbing)
+      function scalingCurveOptions() {
+        var c = colors();
+        var cats = D.scalingCurve.ns.map(function (n) { return (n / 1000) + 'K'; });
+        var opts = baseOpts(cats);
+        opts.legend.show = true;
+        opts.yAxis = yAxisFor(c, 'value', 'serve RSS MB', 55, mbFmt);
+        opts.series = D.scalingCurve.series.map(function (s) {
+          return {
+            name: s.engine, type: 'line', smooth: false, symbol: 'circle', symbolSize: 8,
+            itemStyle: { color: paletteFor(s.key) },
+            lineStyle: { color: paletteFor(s.key), width: 2.5 },
+            emphasis: { focus: 'series' }, data: s.rss,
+          };
+        });
+        return opts;
+      }
+      // QPS vs client processes (line: inline vs worker pool)
+      function throughputCurveOptions() {
+        var c = colors();
+        var cats = D.throughputCurve.conc.map(function (n) { return String(n); });
+        var opts = baseOpts(cats);
+        opts.legend.show = true;
+        opts.xAxis.name = 'client processes';
+        opts.xAxis.nameLocation = 'middle';
+        opts.xAxis.nameGap = 30;
+        opts.xAxis.nameTextStyle = { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 };
+        opts.yAxis = yAxisFor(c, 'value', 'QPS (1 process)', 60, function (v) { return v.toLocaleString(); });
+        opts.series = D.throughputCurve.series.map(function (s) {
+          return {
+            name: s.name, type: 'line', smooth: true, symbol: 'circle', symbolSize: 8,
+            itemStyle: { color: paletteFor(s.key) },
+            lineStyle: { color: paletteFor(s.key), width: 2.5 },
+            emphasis: { focus: 'series' }, data: s.qps,
+          };
+        });
+        return opts;
+      }
+
       var builders = {
         'chart-cross-ram':      crossRamOptions,
         'chart-cross-recall':   crossRecallOptions,
+        'chart-cross-latency':  crossLatencyOptions,
         'chart-cross-frontier': crossFrontierOptions,
         'chart-glove-ram':      gloveRamOptions,
+        'chart-glove-recall':   gloveRecallOptions,
         'chart-density':        densityOptions,
         'chart-shared-filter':  sharedFilterOptions,
         'chart-container':      containerOptions,
         'chart-mnist-ram':      mnistRamOptions,
         'chart-cost':           costOptions,
+        'chart-scaling-curve':  scalingCurveOptions,
         'chart-scaling-ram':    scalingRamOptions,
         'chart-latency':        latencyOptions,
-        'chart-throughput':     throughputOptions,
+        'chart-throughput':     throughputCurveOptions,
         'chart-gate-ram':       gateRamOptions,
         'chart-gate-recall':    gateRecallOptions,
       };
