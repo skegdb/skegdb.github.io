@@ -414,21 +414,13 @@ const chartData = {
 
   <section class="bench-section">
     <div class="bench-section-head">
-      <h2>cold-start bulkhead · neighbour p99 during a reopen</h2>
+      <h2>cold-start bulkhead · neighbour latency during a reopen</h2>
       <p class="bench-section-text">
-        Other-tenant p99 latency while a co-resident index is doing a cold
-        reopen. Bars are p99 (µs, log) · lower is better. The async (shipped)
-        path keeps the neighbour at warm-path latency; the old sync path blocked
-        it for the entire reopen.
+        A 0.5 control-plane fix: an evicted index reopens off the shard thread
+        (<code>spawn_blocking</code>), so a cold reopen no longer stalls other
+        tenants on the same shard. During a 13.4 ms reopen of index A, what
+        index B (a co-resident tenant) saw:
       </p>
-    </div>
-    <div id="chart-coldstart" data-chart class="bench-chart"></div>
-  </section>
-
-  <section class="bench-section">
-    <div class="bench-section-head">
-      <h2>cold-start numbers</h2>
-      <p class="bench-section-text">During a 13.4 ms reopen of index A, what index B saw.</p>
     </div>
     <div class="bench-table-wrap">
       <table class="bench-table">
@@ -613,6 +605,11 @@ const chartData = {
         if (spec.tooltipFmt) opts.tooltip.formatter = spec.tooltipFmt;
         var serie = {
           type: 'bar', barMaxWidth: 46,
+          label: {
+            show: true, position: 'top',
+            color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 10,
+            formatter: function (p) { return spec.fmt ? spec.fmt(p.value) : String(p.value); },
+          },
           data: spec.cells.map(function (r) {
             return {
               value: r[spec.valField],
@@ -637,7 +634,7 @@ const chartData = {
       function crossRamOptions() {
         return engineBarOptions({
           cells: D.cross100k.cells, keyField: 'engine', labelField: 'engine',
-          valField: 'serve_ram_mb', name: 'serve RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          valField: 'serve_ram_mb', name: 'serve RAM MB', gap: 55, type: 'value', fmt: mbFmt,
           tooltipFmt: function (p) {
             var p0 = p[0]; var r = D.cross100k.cells.find(function (x) { return x.engine === p0.name; });
             if (!r) return '';
@@ -692,7 +689,7 @@ const chartData = {
       function densityOptions() {
         return engineBarOptions({
           cells: D.density.cells, keyField: 'key', labelField: 'config',
-          valField: 'peak_ram_mb', name: 'peak RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          valField: 'peak_ram_mb', name: 'peak RAM MB', gap: 55, type: 'value', fmt: mbFmt,
           tooltipFmt: function (p) {
             var r = D.density.cells.find(function (x) { return x.config === p[0].name; });
             if (!r) return '';
@@ -720,7 +717,7 @@ const chartData = {
       function costOptions() {
         return engineBarOptions({
           cells: D.cost.cells, keyField: 'key', labelField: 'engine',
-          valField: 'usd_per_year', name: '$/year · log', gap: 60, type: 'log',
+          valField: 'usd_per_year', name: '$/year', gap: 60, type: 'value',
           fmt: function (v) { return '$' + (v >= 1000 ? (v / 1000) + 'k' : v); },
           tooltipFmt: function (p) {
             var r = D.cost.cells.find(function (x) { return x.engine === p[0].name; });
@@ -734,7 +731,7 @@ const chartData = {
       function scalingRamOptions() {
         return engineBarOptions({
           cells: D.scaling500k.cells, keyField: 'config', labelField: 'config',
-          valField: 'peak_ram_mb', name: 'peak RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          valField: 'peak_ram_mb', name: 'peak RAM MB', gap: 55, type: 'value', fmt: mbFmt,
           tooltipFmt: function (p) {
             var r = D.scaling500k.cells.find(function (x) { return x.config === p[0].name; });
             if (!r) return '';
@@ -743,31 +740,6 @@ const chartData = {
                    'p50 ' + r.p50_ms.toFixed(2) + ' ms · p95 ' + r.p95_ms.toFixed(2) + ' ms';
           },
         });
-      }
-
-      function coldStartOptions() {
-        return engineBarOptions({
-          cells: D.coldStart.cells, keyField: null, labelField: 'mode',
-          valField: 'other_tenant_p99_us', name: 'neighbour p99 · us · log', gap: 65,
-          type: 'log', fmt: usFmt,
-          tooltipFmt: function (p) {
-            var r = D.coldStart.cells.find(function (x) { return x.mode === p[0].name; });
-            if (!r) return '';
-            return '<b>' + r.mode + '</b><br>p99 ' + usFmt(r.other_tenant_p99_us) + '<br>' +
-                   'ops served ' + r.other_tenant_ops;
-          },
-        });
-      }
-      // coldStart has no per-key palette: tint async vs sync by ok/warn-ish tones
-      function coldStartBars() {
-        var opts = coldStartOptions();
-        var c = colors();
-        opts.series[0].data = D.coldStart.cells.map(function (r, i) {
-          var good = r.other_tenant_p99_us < 1000;
-          var col = good ? paletteFor('skeg-tq2') : paletteFor('qdrant-f32');
-          return { value: r.other_tenant_p99_us, itemStyle: { color: col, borderRadius: [3, 3, 0, 0] } };
-        });
-        return opts;
       }
 
       function latencyOptions() {
@@ -820,7 +792,6 @@ const chartData = {
         'chart-container':      containerOptions,
         'chart-cost':           costOptions,
         'chart-scaling-ram':    scalingRamOptions,
-        'chart-coldstart':      coldStartBars,
         'chart-latency':        latencyOptions,
         'chart-throughput':     throughputOptions,
       };
