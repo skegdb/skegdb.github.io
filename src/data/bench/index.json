@@ -24,6 +24,11 @@
       "id": "e",
       "name": "internals",
       "available": true
+    },
+    {
+      "id": "release",
+      "name": "0.5 release",
+      "available": true
     }
   ]
 }

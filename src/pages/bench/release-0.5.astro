@@ -1,0 +1,902 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import BenchInsight from '~/components/BenchInsight.astro';
+import MachineContext from '~/components/MachineContext.astro';
+import DataProvenance from '~/components/DataProvenance.astro';
+import data from '~/data/bench/release-0.5.json';
+
+const cross100k     = data.crossEngine100k as any;
+const crossGlove    = data.crossEngineGlove500k as any;
+const tq2Gate       = data.tq2Gate as any;
+const scaling500k   = data.scaling500k as any;
+const density       = data.multiTenantDensity as any;
+const sharedFilter  = data.sharedFilter as any;
+const container     = data.container as any;
+const mnistTiers    = data.mnistTiers as any;
+const isolation     = data.isolation as any;
+const latency       = data.latencyUnderLoad as any;
+const throughput    = data.throughput as any;
+const cost          = data.cost as any;
+const coldStart     = data.coldStartBulkhead as any;
+
+const palette     = data.palette as Record<string, string>;
+const paletteDark = data.paletteDark as Record<string, string>;
+
+const fmt = (v: any, d = 1) => (v == null || (typeof v === 'number' && isNaN(v))) ? '-' : (typeof v === 'number' ? v.toFixed(d) : String(v));
+const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toLocaleString();
+
+// payload the inline script consumes
+const chartData = {
+  cross100k, crossGlove, tq2Gate, scaling500k, density, sharedFilter,
+  container, mnistTiers, latency, throughput, cost, coldStart,
+  palette, paletteDark,
+};
+---
+<BenchLayout title="0.5 · release · skegdb benchmarks"
+             description="The skeg 0.5 release benchmark story: tq2 default, multi-tenant density, cost, cold-start bulkhead"
+             slice="release">
+
+  <header class="bench-hero">
+    <p class="hero-eyebrow">0.5 release · the story so far</p>
+    <h1>tq2 is the default, multi-tenant is the wedge</h1>
+    <p class="hero-sub">
+      skeg 0.5 makes <code>tq2</code> (TurboQuant 2-bit) the default compression
+      tier: recall-neutral against the old <code>int8</code> default and leaner
+      at high dimensionality. This slice tells the full 0.5 story end to end:
+      the tq2 promotion, the high-density multi-tenant wedge (per-tenant
+      isolation that Qdrant has no clean answer for), survival in a
+      memory-capped container, the cost gap at 50M vectors, the single-tenant
+      scaling tiers, and a new control-plane feature: a tiering cold-start
+      bulkhead that keeps one tenant's index reopen from stalling its
+      neighbours on the same shard.
+    </p>
+  </header>
+
+  <BenchInsight kind="finding" label="the 0.5 headline">
+    <p>
+      <strong>One engine, leanest and most accurate at the same time.</strong>
+      At 100K mxbai-1024 vectors, skeg-tq2 serves at <strong>47 MB</strong> with
+      recall@10 = 1.000, while the HNSW backends sit at 426-885 MB for slightly
+      lower recall. The same shape holds on the hard GloVe-100-angular
+      distribution at 500K, where skeg-tq2 leads on <em>both</em> recall and RAM
+      (31 MB, recall@10 0.975) - its on-disk f32 re-rank recovers what
+      quantization loses.
+    </p>
+    <p>
+      The deeper wedge is multi-tenant: skeg's RAM is bounded by the largest
+      tenant, not the sum. Five tenants at 100K each fit in <strong>~200 MB</strong>
+      with physical isolation and 0 leaks, versus 1.8-3.5 GB for the two Qdrant
+      strategies.
+    </p>
+  </BenchInsight>
+
+  <MachineContext snapshot="slice-a" fallback="slice-a" />
+
+  <DataProvenance
+    corpus="simple-wiki"
+    embedder="mxbai+minilm"
+    groundTruth="exact-bruteforce"
+    queries="Hold-out passages disjoint from corpus (mxbai 1024d, minilm 384d). Standard datasets GloVe-100-angular and MNIST-784 used for the cross-distribution checks."
+    notes="0.5 reference numbers from <code>skeg-bench/RESULTS.md</code> plus the tq2-vs-int8 default-tier gate across dimensionalities. Single-machine Apple Silicon (M1). RAM ratios are hardware-independent; absolute latencies and build times are not. Recall is against exact brute-force cosine ground truth; RAM via <code>ps -o rss</code>."
+  />
+
+  <!-- ============ 1. tq2 is the new default ============ -->
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tq2 is the new default · the gate across dimensionalities</h2>
+      <p class="bench-section-text">
+        Before promoting <code>tq2</code> to the default tier we gated it
+        against the old <code>int8</code> default on three datasets spanning
+        100d to 784d. Recall is neutral (within noise everywhere) and RAM is
+        equal-or-leaner, with the win growing at higher dimensionality (mnist
+        784d: 168 vs 197 MB). The bars below are serve RAM per tier and
+        dataset · lower is better.
+      </p>
+    </div>
+    <div id="chart-gate-ram" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tq2 gate · recall@10 holds</h2>
+      <p class="bench-section-text">
+        recall@10 for the same gate. The two tiers track each other across all
+        three distributions · tq2 never drops below 0.999.
+      </p>
+    </div>
+    <div id="chart-gate-recall" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cross-engine · serve RAM at 100K (mxbai-1024)</h2>
+      <p class="bench-section-text">
+        Every engine at a reasonable default config on the same corpus. skeg-tq2
+        is the single point that is simultaneously leanest, most accurate, and
+        fast. Bars are serve RAM (MB, log) · lower is better; hover for recall
+        and latency.
+      </p>
+    </div>
+    <div id="chart-cross-ram" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cross-engine · RAM vs recall frontier</h2>
+      <p class="bench-section-text">
+        Each engine is one operating point at 100K. Lower-right is better (less
+        RAM, higher recall). skeg-tq2 sits alone in the bottom-right corner.
+      </p>
+    </div>
+    <div id="chart-cross-frontier" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cross-engine numbers · mxbai-1024 @ 100K</h2>
+      <p class="bench-section-text">Click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="cross-table">
+        <thead>
+          <tr>
+            <th>engine</th>
+            <th>serve RAM MB</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 ms</th>
+            <th>p95 ms</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cross100k.cells.map((r: any) => (
+            <tr>
+              <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
+              <td class="num">{fmtInt(r.serve_ram_mb)}</td>
+              <td class="num">{fmt(r['recall@10'], 3)}</td>
+              <td class="num">{fmt(r['recall@100'], 3)}</td>
+              <td class="num">{fmt(r.p50_ms, 2)}</td>
+              <td class="num">{fmt(r.p95_ms, 2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <BenchInsight kind="context">
+    <p>
+      <strong>The hard-distribution check.</strong> On GloVe-100-angular at 500K
+      (the canonical ann-benchmarks cosine dataset, where recall drops for
+      everyone) skeg-tq2 still leads on both recall and RAM, beating even
+      full-precision Qdrant.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>GloVe-100-angular @ 500K</h2>
+      <p class="bench-section-text">
+        A genuinely hard distribution. HNSW engines at default <code>ef</code>;
+        raising it trades latency for recall but not the RAM gap.
+      </p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="glove-table">
+        <thead>
+          <tr>
+            <th>engine</th>
+            <th>serve RAM MB</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 ms</th>
+          </tr>
+        </thead>
+        <tbody>
+          {crossGlove.cells.map((r: any) => (
+            <tr>
+              <td><span class="engine-dot" style={`background:${palette[r.engine] || '#999'}`}></span>{r.engine}</td>
+              <td class="num">{fmtInt(r.serve_ram_mb)}</td>
+              <td class="num">{fmt(r['recall@10'], 3)}</td>
+              <td class="num">{fmt(r['recall@100'], 3)}</td>
+              <td class="num">{fmt(r.p50_ms, 1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 2. Multi-tenant wedge ============ -->
+  <BenchInsight kind="finding" label="the wedge">
+    <p>
+      <strong>Multi-tenant density is where skeg has no real competitor.</strong>
+      Per-tenant indexes give physical isolation (0 leaks by construction) and
+      RAM bounded by the largest tenant. Five tenants at 100K each = ~200 MB at
+      recall 1.000. Qdrant's two strategies (collection-per-tenant, shared+filter)
+      cost 9-17x more RAM at lower recall.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>multi-tenant density · 5 tenants x 100K</h2>
+      <p class="bench-section-text">
+        Peak RAM for five tenants of 100K vectors each. Bars are peak RAM (MB,
+        log) · lower is better; hover for recall and leak count.
+      </p>
+    </div>
+    <div id="chart-density" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>shared index + per-tenant filter · apples-to-apples</h2>
+      <p class="bench-section-text">
+        Both engines run one index with a per-tenant filter, the configuration
+        Qdrant is built around. skeg-tq2 still serves at 222 MB RSS vs 2213 MB,
+        at higher recall, with 0 measured leaks.
+      </p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>config</th>
+            <th>peak RAM MB</th>
+            <th>serve RSS MB</th>
+            <th>recall</th>
+            <th>leaks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sharedFilter.cells.map((r: any) => (
+            <tr>
+              <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
+              <td class="num">{fmtInt(r.peak_ram_mb)}</td>
+              <td class="num">{fmtInt(r.serve_rss_mb)}</td>
+              <td class="num">{fmt(r.recall, 3)}</td>
+              <td class="num">{r.leaks}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tenant isolation · adversarial leak-fuzz</h2>
+      <p class="bench-section-text">
+        Query a tenant's index with another tenant's exact vector (its own
+        nearest neighbour) while filtering for the victim, with mid-stream
+        deletes and consolidation.
+      </p>
+    </div>
+    <div class="isolation-verdict">
+      <div class="iv-grid">
+        <div><span class="iv-k">tenants</span><span class="iv-v">{isolation.tenants}</span></div>
+        <div><span class="iv-k">vectors / tenant</span><span class="iv-v">{fmtInt(isolation.vectors_per_tenant)}</span></div>
+        <div><span class="iv-k">rounds</span><span class="iv-v">{isolation.rounds}</span></div>
+        <div><span class="iv-k">scoped queries</span><span class="iv-v">{isolation.scoped_queries}</span></div>
+        <div><span class="iv-k">cross-tenant leaks</span><span class="iv-v">{isolation.cross_tenant_leaks}</span></div>
+        <div><span class="iv-k">verdict</span><span class="iv-v iv-pass">{isolation.verdict}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. Tight container / OOM + cost ============ -->
+  <BenchInsight kind="finding" label="survival + cost">
+    <p>
+      <strong>skeg survives where Qdrant is OOM-killed.</strong> Under a kernel-
+      enforced 256 MB cap on MNIST-60K, skeg-tq2 peaks at 156 MB and passes at
+      recall 1.000; qdrant-f32 needs 473 MB and is OOM-killed. At 50M vectors x
+      1024-dim the resident-RAM gap becomes a 10x cost gap: $930/yr vs $9,647/yr
+      at matched recall.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>tight container · MNIST 60K under a 256 MB cap</h2>
+      <p class="bench-section-text">
+        The test others use to show Qdrant OOM-killed. Bar is peak RAM (MB); the
+        dashed line is the 256 MB kernel cap · staying under it is the whole
+        game.
+      </p>
+    </div>
+    <div id="chart-container" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>MNIST recall / latency tiers</h2>
+      <p class="bench-section-text">
+        All skeg tiers hold recall@10 1.0 on raw pixels; Qdrant's int8
+        quantization collapses to 0.914.
+      </p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>config</th>
+            <th>peak RAM MB</th>
+            <th>recall@10</th>
+            <th>recall@100</th>
+            <th>p50 ms</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mnistTiers.cells.map((r: any) => (
+            <tr>
+              <td><span class="engine-dot" style={`background:${palette[r.key] || '#999'}`}></span>{r.config}</td>
+              <td class="num">{fmtInt(r.peak_ram_mb)}</td>
+              <td class="num">{fmt(r['recall@10'], 3)}</td>
+              <td class="num">{fmt(r['recall@100'], 3)}</td>
+              <td class="num">{fmt(r.p50_ms, 2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cost · 50M x 1024-dim @ $4/GB-month</h2>
+      <p class="bench-section-text">
+        Resident RAM turned into a yearly bill at a typical managed-RAM price.
+        90% lower memory cost at matched recall. Bars are $/year · lower is
+        better.
+      </p>
+    </div>
+    <div id="chart-cost" data-chart class="bench-chart"></div>
+  </section>
+
+  <!-- ============ 4. Single-tenant scaling tiers ============ -->
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>single-tenant scaling · mxbai-1024 @ 500K</h2>
+      <p class="bench-section-text">
+        Peak RAM during build, recall, and latency at 500K across skeg's tiers
+        vs Qdrant. Peak is the stable, quotable number; steady serve RSS is far
+        lower still (skeg 76-198 MB vs qdrant 2331-2563 MB). Bars are peak RAM
+        (MB, log) · lower is better.
+      </p>
+    </div>
+    <div id="chart-scaling-ram" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>scaling tiers numbers</h2>
+      <p class="bench-section-text">Click headers to sort.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table" id="scaling-table">
+        <thead>
+          <tr>
+            <th>config</th>
+            <th>peak RAM @500K MB</th>
+            <th>recall@10</th>
+            <th>p50 ms</th>
+            <th>p95 ms</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scaling500k.cells.map((r: any) => (
+            <tr>
+              <td><span class="engine-dot" style={`background:${palette[r.config] || '#999'}`}></span>{r.config}</td>
+              <td class="num">{fmtInt(r.peak_ram_mb)}</td>
+              <td class="num">{fmt(r['recall@10'], 4)}</td>
+              <td class="num">{fmt(r.p50_ms, 2)}</td>
+              <td class="num">{fmt(r.p95_ms, 2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 5. Cold-start bulkhead ============ -->
+  <BenchInsight kind="finding" label="new control-plane feature">
+    <p>
+      <strong>The tiering cold-start bulkhead.</strong> In 0.5 a vindex reopen
+      runs off the shard thread via <code>spawn_blocking</code>, so a cold reopen
+      of one tenant's index does not stall its neighbours on the same shard.
+      During a 13.4 ms reopen of index A, a co-resident index B served 209 ops
+      at p99 144 µs (async) versus only 2 ops at p99 11.3 ms in the synchronous
+      version this fixed · other-tenant p99 during a cold reopen drops
+      <strong>~78x</strong>.
+    </p>
+  </BenchInsight>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cold-start bulkhead · neighbour p99 during a reopen</h2>
+      <p class="bench-section-text">
+        Other-tenant p99 latency while a co-resident index is doing a cold
+        reopen. Bars are p99 (µs, log) · lower is better. The async (shipped)
+        path keeps the neighbour at warm-path latency; the old sync path blocked
+        it for the entire reopen.
+      </p>
+    </div>
+    <div id="chart-coldstart" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>cold-start numbers</h2>
+      <p class="bench-section-text">During a 13.4 ms reopen of index A, what index B saw.</p>
+    </div>
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>reopen mode</th>
+            <th>neighbour ops served</th>
+            <th>neighbour p50 µs</th>
+            <th>neighbour p99 µs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {coldStart.cells.map((r: any) => (
+            <tr>
+              <td>{r.mode}</td>
+              <td class="num">{fmtInt(r.other_tenant_ops)}</td>
+              <td class="num">{fmt(r.other_tenant_p50_us, 1)}</td>
+              <td class="num">{fmtInt(r.other_tenant_p99_us)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 6. Throughput + latency under load ============ -->
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>latency under load · noisy neighbour</h2>
+      <p class="bench-section-text">
+        A victim tenant's p95, idle and while a noisy tenant is hammered by 8
+        threads. skeg is ~2x lower idle and under load. Bars are p95 (ms) ·
+        lower is better.
+      </p>
+    </div>
+    <div id="chart-latency" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-section">
+    <div class="bench-section-head">
+      <h2>throughput · 50K x 256-dim, tq2</h2>
+      <p class="bench-section-text">
+        Single-process QPS (GIL-free client processes), inline vs the worker
+        pool. QPS is noisy (+/-15%) and strongly dimension-dependent; the
+        takeaway is directional · one process scales to a per-process ceiling
+        well above any single-shard folklore number, and the worker pool does
+        not raise that ceiling here.
+      </p>
+    </div>
+    <div id="chart-throughput" data-chart class="bench-chart"></div>
+  </section>
+
+  <section class="bench-methodology">
+    <h2>more</h2>
+    <ul>
+      <li><strong>Default tier</strong>: 0.5 promotes <code>tq2</code> (TurboQuant 2-bit) over <code>int8</code> · recall-neutral on glove-100d / minilm-384d / mnist-784d, equal-or-leaner RAM.</li>
+      <li><strong>Multi-tenant</strong>: per-tenant index gives physical isolation (0 leaks by construction); shared+filter measured at 0 leaks across an adversarial 604-query fuzz over 8 tenants.</li>
+      <li><strong>Container</strong>: kernel-enforced 256 MB cgroup cap on MNIST-60K · the authoritative version is <code>docker/run-oom-demo.sh</code>.</li>
+      <li><strong>Cost</strong>: <code>tools/cost_calculator.py --vectors 50_000_000 --dim 1024 --tier tq2 --price 4</code>.</li>
+      <li><strong>Cold-start bulkhead</strong>: vindex reopen moved off the shard thread via <code>spawn_blocking</code>; neighbour p99 during a 13.4 ms reopen drops from 11.3 ms (sync) to 144 µs (async).</li>
+      <li><strong>Reproduce</strong>: every number above is <code>python runner.py &lt;phase&gt;</code> in <code>skeg-bench</code>; see <code>RESULTS.md</code>.</li>
+    </ul>
+  </section>
+
+  <script is:inline id="bench-data" type="application/json" set:html={JSON.stringify(chartData)} />
+
+  <script is:inline>
+    (function () {
+      var dataEl = document.getElementById('bench-data');
+      if (!dataEl || !window.echarts) return;
+      var D;
+      try { D = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+      function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+      function colors() {
+        var dark = isDark();
+        return { fg: dark ? '#ece7d8' : '#1b1b1b', mute: dark ? '#8f897a' : '#6b665d',
+                 rule: dark ? '#3a3830' : '#d6d1c4', axis: dark ? '#3a3830' : '#b9b2a0',
+                 bg: dark ? '#1c1b16' : '#ffffff' };
+      }
+      function paletteFor(key) { return (isDark() ? D.paletteDark[key] : D.palette[key]) || '#999'; }
+
+      function baseOpts(categories) {
+        var c = colors();
+        return {
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif', color: c.fg },
+          animation: true, animationDuration: 700, animationEasing: 'cubicOut',
+          grid: { left: 70, right: 28, top: 24, bottom: 70, containLabel: true },
+          legend: {
+            bottom: 0,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+            icon: 'roundRect', itemWidth: 14, itemHeight: 4, itemGap: 14,
+          },
+          tooltip: {
+            trigger: 'axis', axisPointer: { type: 'shadow' },
+            backgroundColor: c.bg, borderColor: c.fg, borderWidth: 1,
+            textStyle: { color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 12 },
+            padding: [8, 12], extraCssText: 'box-shadow: 0 4px 24px rgba(0,0,0,0.18); border-radius: 0;',
+          },
+          xAxis: {
+            type: 'category', data: categories,
+            axisLine: { lineStyle: { color: c.axis } },
+            axisTick: { lineStyle: { color: c.axis } },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+          },
+          yAxis: {
+            type: 'value',
+            axisLine: { show: false }, axisTick: { show: false },
+            axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+            splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          },
+        };
+      }
+      function yAxisFor(c, type, name, gap, fmt) {
+        return {
+          type: type,
+          axisLine: { show: false }, axisTick: { show: false },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: fmt },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+          name: name, nameLocation: 'middle', nameGap: gap,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+        };
+      }
+      var mbFmt = function (v) { return v >= 1024 ? (v / 1024).toFixed(1) + ' GiB' : v + ' MB'; };
+      var usFmt = function (v) { return v >= 1000 ? (v / 1000).toFixed(1) + ' ms' : v + ' us'; };
+
+      function chart(id, build) {
+        var el = document.getElementById(id); if (!el) return null;
+        var inst = window.echarts.init(el, null, { renderer: 'svg' });
+        inst.setOption(build());
+        return inst;
+      }
+
+      // ---- 1a. tq2 gate · serve RAM (grouped bars by dim, one series per tier) ----
+      function gateRamOptions() {
+        var c = colors();
+        var opts = baseOpts(D.tq2Gate.dims);
+        opts.yAxis = yAxisFor(c, 'value', 'serve RAM MB', 50, function (v) { return v + ' MB'; });
+        opts.series = D.tq2Gate.tiers.map(function (tier) {
+          return {
+            name: tier, type: 'bar', barMaxWidth: 28,
+            itemStyle: { color: paletteFor(tier), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' },
+            data: D.tq2Gate.dims.map(function (dim) {
+              var r = D.tq2Gate.cells.find(function (x) { return x.dim === dim && x.tier === tier; });
+              return r ? r.serve_ram_mb : null;
+            }),
+          };
+        });
+        return opts;
+      }
+      // ---- 1b. tq2 gate · recall@10 (grouped line) ----
+      function gateRecallOptions() {
+        var c = colors();
+        var opts = baseOpts(D.tq2Gate.dims);
+        opts.yAxis = yAxisFor(c, 'value', 'recall @ 10', 50, function (v) { return v.toFixed(3); });
+        opts.yAxis.min = 0.99; opts.yAxis.max = 1.0;
+        opts.series = D.tq2Gate.tiers.map(function (tier) {
+          return {
+            name: tier, type: 'line', smooth: true, symbol: 'circle', symbolSize: 9,
+            itemStyle: { color: paletteFor(tier) },
+            lineStyle: { color: paletteFor(tier), width: 2.5 },
+            emphasis: { focus: 'series', scale: 1.6 },
+            data: D.tq2Gate.dims.map(function (dim) {
+              var r = D.tq2Gate.cells.find(function (x) { return x.dim === dim && x.tier === tier; });
+              return r ? r['recall@10'] : null;
+            }),
+          };
+        });
+        return opts;
+      }
+
+      // ---- generic single-series-per-engine bar (one bar per engine, x = engine) ----
+      function engineBarOptions(spec) {
+        // spec: { cells, keyField, labelField, valField, name, gap, type, fmt, capLine, tooltipFmt }
+        var c = colors();
+        var cats = spec.cells.map(function (r) { return r[spec.labelField]; });
+        var opts = baseOpts(cats);
+        opts.legend.show = false;
+        opts.yAxis = yAxisFor(c, spec.type || 'value', spec.name, spec.gap, spec.fmt);
+        if (spec.tooltipFmt) opts.tooltip.formatter = spec.tooltipFmt;
+        var serie = {
+          type: 'bar', barMaxWidth: 46,
+          data: spec.cells.map(function (r) {
+            return {
+              value: r[spec.valField],
+              itemStyle: { color: paletteFor(r[spec.keyField]), borderRadius: [3, 3, 0, 0] },
+            };
+          }),
+          emphasis: { focus: 'self' },
+        };
+        if (spec.capLine != null) {
+          serie.markLine = {
+            silent: true, symbol: 'none',
+            lineStyle: { color: c.mute, type: 'dashed', width: 1.5 },
+            label: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10,
+                     formatter: spec.capLabel || (spec.capLine + '') },
+            data: [{ yAxis: spec.capLine }],
+          };
+        }
+        opts.series = [serie];
+        return opts;
+      }
+
+      function crossRamOptions() {
+        return engineBarOptions({
+          cells: D.cross100k.cells, keyField: 'engine', labelField: 'engine',
+          valField: 'serve_ram_mb', name: 'serve RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          tooltipFmt: function (p) {
+            var p0 = p[0]; var r = D.cross100k.cells.find(function (x) { return x.engine === p0.name; });
+            if (!r) return '';
+            return '<b>' + r.engine + '</b><br>serve RAM ' + r.serve_ram_mb + ' MB<br>' +
+                   'recall@10 ' + r['recall@10'].toFixed(3) + '<br>' +
+                   'recall@100 ' + r['recall@100'].toFixed(3) + '<br>' +
+                   'p50 ' + r.p50_ms.toFixed(2) + ' ms · p95 ' + r.p95_ms.toFixed(2) + ' ms';
+          },
+        });
+      }
+
+      function crossFrontierOptions() {
+        var c = colors();
+        var opts = baseOpts([]);
+        opts.legend = { show: false };
+        opts.tooltip.trigger = 'item';
+        opts.tooltip.formatter = function (p) {
+          var d = p.data;
+          return '<b>' + d[2] + '</b><br>serve RAM ' + d[0] + ' MB<br>recall@10 ' + d[1].toFixed(3);
+        };
+        opts.xAxis = {
+          type: 'log',
+          name: 'serve RAM · MB · log', nameLocation: 'middle', nameGap: 32,
+          nameTextStyle: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10 },
+          axisLine: { lineStyle: { color: c.axis } },
+          axisTick: { lineStyle: { color: c.axis } },
+          axisLabel: { color: c.mute, fontFamily: 'ui-monospace, monospace', fontSize: 10, formatter: mbFmt },
+          splitLine: { lineStyle: { color: c.rule, type: 'dashed' } },
+        };
+        opts.yAxis = yAxisFor(c, 'value', 'recall @ 10', 50, function (v) { return v.toFixed(2); });
+        opts.yAxis.min = 0.9; opts.yAxis.max = 1.0;
+        opts.series = D.cross100k.cells.map(function (r) {
+          return {
+            name: r.engine, type: 'scatter', symbol: 'circle', symbolSize: 22,
+            itemStyle: {
+              color: paletteFor(r.engine), borderColor: c.bg, borderWidth: 2,
+              shadowBlur: 8, shadowColor: paletteFor(r.engine) + '66',
+            },
+            emphasis: { focus: 'series', scale: 1.3 },
+            label: {
+              show: true, position: 'right', offset: [8, 0],
+              color: c.fg, fontFamily: 'ui-monospace, monospace', fontSize: 11,
+              formatter: r.engine,
+            },
+            data: [[r.serve_ram_mb, r['recall@10'], r.engine]],
+            z: 3,
+          };
+        });
+        return opts;
+      }
+
+      function densityOptions() {
+        return engineBarOptions({
+          cells: D.density.cells, keyField: 'key', labelField: 'config',
+          valField: 'peak_ram_mb', name: 'peak RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          tooltipFmt: function (p) {
+            var r = D.density.cells.find(function (x) { return x.config === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.config + '</b><br>peak RAM ' + r.peak_ram_mb + ' MB<br>' +
+                   'recall ' + r.recall.toFixed(3) + '<br>leaks ' + r.leaks;
+          },
+        });
+      }
+
+      function containerOptions() {
+        return engineBarOptions({
+          cells: D.container.cells, keyField: 'key', labelField: 'engine',
+          valField: 'peak_ram_mb', name: 'peak RAM MB', gap: 50, type: 'value',
+          fmt: function (v) { return v + ' MB'; },
+          capLine: D.container.cap_mb, capLabel: D.container.cap_mb + ' MB cap',
+          tooltipFmt: function (p) {
+            var r = D.container.cells.find(function (x) { return x.engine === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.engine + '</b><br>peak RAM ' + r.peak_ram_mb + ' MB<br>' +
+                   'recall@10 ' + r['recall@10'].toFixed(3) + '<br>verdict ' + r.verdict;
+          },
+        });
+      }
+
+      function costOptions() {
+        return engineBarOptions({
+          cells: D.cost.cells, keyField: 'key', labelField: 'engine',
+          valField: 'usd_per_year', name: '$/year · log', gap: 60, type: 'log',
+          fmt: function (v) { return '$' + (v >= 1000 ? (v / 1000) + 'k' : v); },
+          tooltipFmt: function (p) {
+            var r = D.cost.cells.find(function (x) { return x.engine === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.engine + '</b><br>resident ' + r.resident_gib + ' GiB<br>' +
+                   '$' + r.usd_per_year.toLocaleString() + ' / year';
+          },
+        });
+      }
+
+      function scalingRamOptions() {
+        return engineBarOptions({
+          cells: D.scaling500k.cells, keyField: 'config', labelField: 'config',
+          valField: 'peak_ram_mb', name: 'peak RAM MB · log', gap: 55, type: 'log', fmt: mbFmt,
+          tooltipFmt: function (p) {
+            var r = D.scaling500k.cells.find(function (x) { return x.config === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.config + '</b><br>peak RAM ' + r.peak_ram_mb + ' MB<br>' +
+                   'recall@10 ' + r['recall@10'].toFixed(4) + '<br>' +
+                   'p50 ' + r.p50_ms.toFixed(2) + ' ms · p95 ' + r.p95_ms.toFixed(2) + ' ms';
+          },
+        });
+      }
+
+      function coldStartOptions() {
+        return engineBarOptions({
+          cells: D.coldStart.cells, keyField: null, labelField: 'mode',
+          valField: 'other_tenant_p99_us', name: 'neighbour p99 · us · log', gap: 65,
+          type: 'log', fmt: usFmt,
+          tooltipFmt: function (p) {
+            var r = D.coldStart.cells.find(function (x) { return x.mode === p[0].name; });
+            if (!r) return '';
+            return '<b>' + r.mode + '</b><br>p99 ' + usFmt(r.other_tenant_p99_us) + '<br>' +
+                   'ops served ' + r.other_tenant_ops;
+          },
+        });
+      }
+      // coldStart has no per-key palette: tint async vs sync by ok/warn-ish tones
+      function coldStartBars() {
+        var opts = coldStartOptions();
+        var c = colors();
+        opts.series[0].data = D.coldStart.cells.map(function (r, i) {
+          var good = r.other_tenant_p99_us < 1000;
+          var col = good ? paletteFor('skeg-tq2') : paletteFor('qdrant-f32');
+          return { value: r.other_tenant_p99_us, itemStyle: { color: col, borderRadius: [3, 3, 0, 0] } };
+        });
+        return opts;
+      }
+
+      function latencyOptions() {
+        var c = colors();
+        var cats = D.latency.cells.map(function (r) { return r.engine; });
+        var opts = baseOpts(cats);
+        opts.yAxis = yAxisFor(c, 'value', 'p95 ms', 50, function (v) { return v + ' ms'; });
+        opts.series = [
+          {
+            name: 'idle p95', type: 'bar', barMaxWidth: 28,
+            itemStyle: { color: paletteFor('skeg-tq4'), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' },
+            data: D.latency.cells.map(function (r) { return r.idle_p95_ms; }),
+          },
+          {
+            name: 'under-load p95', type: 'bar', barMaxWidth: 28,
+            itemStyle: { color: paletteFor('chroma'), borderRadius: [3, 3, 0, 0] },
+            emphasis: { focus: 'series' },
+            data: D.latency.cells.map(function (r) { return r.under_load_p95_ms; }),
+          },
+        ];
+        return opts;
+      }
+
+      function throughputOptions() {
+        var c = colors();
+        var cats = D.throughput.cells.map(function (r) { return r.mode; });
+        var opts = baseOpts(cats);
+        opts.legend.show = false;
+        opts.yAxis = yAxisFor(c, 'value', 'peak QPS (1 process)', 50, function (v) { return v.toLocaleString(); });
+        opts.series = [{
+          type: 'bar', barMaxWidth: 60,
+          data: D.throughput.cells.map(function (r, i) {
+            return { value: r.qps, itemStyle: { color: paletteFor(i === 0 ? 'skeg-tq2' : 'skeg-tq4'), borderRadius: [3, 3, 0, 0] } };
+          }),
+          emphasis: { focus: 'self' },
+        }];
+        opts.tooltip.formatter = function (p) {
+          return '<b>' + p[0].name + '</b><br>' + p[0].value.toLocaleString() + ' QPS';
+        };
+        return opts;
+      }
+
+      var builders = {
+        'chart-gate-ram':       gateRamOptions,
+        'chart-gate-recall':    gateRecallOptions,
+        'chart-cross-ram':      crossRamOptions,
+        'chart-cross-frontier': crossFrontierOptions,
+        'chart-density':        densityOptions,
+        'chart-container':      containerOptions,
+        'chart-cost':           costOptions,
+        'chart-scaling-ram':    scalingRamOptions,
+        'chart-coldstart':      coldStartBars,
+        'chart-latency':        latencyOptions,
+        'chart-throughput':     throughputOptions,
+      };
+
+      var charts = {};
+      Object.keys(builders).forEach(function (id) {
+        charts[id] = chart(id, builders[id]);
+      });
+
+      function reRender() {
+        Object.keys(builders).forEach(function (id) {
+          if (charts[id]) charts[id].setOption(builders[id](), true);
+        });
+      }
+      window.addEventListener('resize', function () {
+        Object.values(charts).forEach(function (c) { if (c) c.resize(); });
+      });
+      document.querySelectorAll('[data-chart]').forEach(function (el) {
+        el.addEventListener('skegdb-theme-changed', reRender);
+      });
+
+      function trySort(tableSel, headerEl) {
+        var tbody = document.querySelector(tableSel + ' tbody');
+        var headers = Array.from(document.querySelectorAll(tableSel + ' th'));
+        var idx = headers.indexOf(headerEl);
+        var asc = headerEl.dataset.dir !== 'asc';
+        headers.forEach(function (h) { h.dataset.dir = ''; h.classList.remove('sorted', 'asc'); });
+        headerEl.dataset.dir = asc ? 'asc' : 'desc';
+        headerEl.classList.add('sorted', asc ? 'asc' : 'desc');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+          var aa = a.children[idx].textContent.trim().replace(/[,$]/g, '');
+          var bb = b.children[idx].textContent.trim().replace(/[,$]/g, '');
+          var an = parseFloat(aa), bn = parseFloat(bb);
+          if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+          return asc ? aa.localeCompare(bb) : bb.localeCompare(aa);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+      }
+      ['#cross-table', '#glove-table', '#scaling-table'].forEach(function (sel) {
+        document.querySelectorAll(sel + ' th').forEach(function (th) {
+          th.addEventListener('click', function () { trySort(sel, th); });
+        });
+      });
+    })();
+  </script>
+
+  <style>
+    .bench-hero { margin-bottom: 16px; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--mute); margin: 0 0 8px; }
+    .bench-hero h1 { margin: 0 0 12px; font-size: 30px; font-weight: 300; letter-spacing: -0.01em; }
+    .hero-sub { margin: 0; color: var(--fg); max-width: 720px; font-size: 15px; line-height: 1.6; }
+    .hero-sub code { background: var(--bg-pill); padding: 1px 6px; font-size: 13px; }
+    .hero-sub a { color: var(--fg); }
+
+    .engine-dot {
+      display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+      margin-right: 7px; vertical-align: middle;
+    }
+
+    .isolation-verdict {
+      padding: 18px 20px;
+      background: var(--bg-card);
+      border-left: 3px solid var(--ok);
+    }
+    .iv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px 24px;
+    }
+    .iv-grid > div { display: flex; flex-direction: column; gap: 4px; }
+    .iv-k {
+      font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--mute);
+    }
+    .iv-v { font-family: var(--mono); font-size: 18px; color: var(--fg); }
+    .iv-v.iv-pass { color: var(--ok); }
+  </style>
+</BenchLayout>

@@ -39,6 +39,14 @@ const slices = [
     text: 'skeg-internal sweep: int8 vs pq:128 vs turboquant-{1,2,4}. Same engine, different compression tiers · the recall/RAM/disk tradeoff inside the system. Plus low-ram mode (M0 prototype) and cold-start RSS (first-query memory cost).',
     href: '/bench/slice-e/',
   },
+  {
+    id: 'release',
+    tag: '0.5 release',
+    name: '0.5 release',
+    headline: 'The 0.5 story: tq2 default, multi-tenant wedge, cost',
+    text: 'The full 0.5 release narrative. tq2 becomes the default tier (recall-neutral, leaner than int8 across 100d-784d), the high-density multi-tenant wedge (per-tenant isolation, 0 leaks, ~200 MB for 5 tenants), survival under a 256 MB container cap where qdrant OOMs, the 10x cost gap at 50M vectors, single-tenant scaling tiers, and the new tiering cold-start bulkhead.',
+    href: '/bench/release-0.5/',
+  },
 ];
 const available = new Set(index.slices.filter((s: any) => s.available).map((s: any) => s.id));
 ---
@@ -84,7 +92,7 @@ const available = new Set(index.slices.filter((s: any) => s.available).map((s: a
     {slices.map((s) => (
       <a class={`slice-card ${available.has(s.id) ? '' : 'pending'}`} href={s.href}>
         <header>
-          <span class="slice-tag">slice {s.id.toUpperCase()}</span>
+          <span class="slice-tag">{(s as any).tag ?? `slice ${s.id.toUpperCase()}`}</span>
           <span class={`slice-status ${available.has(s.id) ? 'ready' : 'pending'}`}>
             {available.has(s.id) ? 'data live' : 'pending'}
           </span>

@@ -1,0 +1,174 @@
+{
+  "slice": "release",
+  "name": "0.5 release",
+  "description": "The 0.5 release story: tq2 becomes the default tier (recall-neutral, leaner than int8), the multi-tenant density wedge, tight-container survival and cost, single-tenant scaling tiers, the tiering cold-start bulkhead control-plane feature, and throughput / latency under load. All numbers measured single-machine on Apple Silicon (M1); RAM ratios are hardware-independent, absolute latencies and build times are not. Recall is against exact brute-force cosine ground truth; RAM via ps -o rss.",
+  "results_path": "skeg-bench/RESULTS.md",
+  "available": true,
+
+  "engines": [
+    "skeg-tq2",
+    "lancedb",
+    "milvus-lite",
+    "hnswlib",
+    "chroma",
+    "qdrant-f32"
+  ],
+
+  "palette": {
+    "skeg-tq2": "#1b1b1b",
+    "skeg-int8": "#5c4096",
+    "skeg-tq4": "#2c6e9b",
+    "skeg-tq1": "#a04a7c",
+    "lancedb": "#5cad6b",
+    "milvus-lite": "#c2a14a",
+    "hnswlib": "#7a5cd4",
+    "chroma": "#d4845c",
+    "qdrant-f32": "#a48bfb",
+    "qdrant-int8": "#826ec0",
+    "qdrant": "#a48bfb"
+  },
+  "paletteDark": {
+    "skeg-tq2": "#ece7d8",
+    "skeg-int8": "#b9a7e6",
+    "skeg-tq4": "#6fb3e3",
+    "skeg-tq1": "#d990b9",
+    "lancedb": "#9bdda6",
+    "milvus-lite": "#e3cd7c",
+    "hnswlib": "#a48bfb",
+    "chroma": "#f4a87c",
+    "qdrant-f32": "#c6b4ff",
+    "qdrant-int8": "#a791d6",
+    "qdrant": "#c6b4ff"
+  },
+
+  "crossEngine100k": {
+    "title": "Cross-engine single-tenant, mxbai-1024 @ 100K",
+    "engines": ["skeg-tq2", "lancedb", "milvus-lite", "hnswlib", "chroma", "qdrant-f32"],
+    "cells": [
+      { "engine": "skeg-tq2",    "serve_ram_mb": 47,  "recall@10": 1.000, "recall@100": 1.000, "p50_ms": 2.49,  "p95_ms": 3.57 },
+      { "engine": "lancedb",     "serve_ram_mb": 198, "recall@10": 0.998, "recall@100": 0.991, "p50_ms": 59.26, "p95_ms": 98.14 },
+      { "engine": "milvus-lite", "serve_ram_mb": 108, "recall@10": 0.934, "recall@100": 0.880, "p50_ms": 2.69,  "p95_ms": 4.34 },
+      { "engine": "hnswlib",     "serve_ram_mb": 426, "recall@10": 0.985, "recall@100": 0.925, "p50_ms": 1.99,  "p95_ms": 2.58 },
+      { "engine": "chroma",      "serve_ram_mb": 682, "recall@10": 0.985, "recall@100": 0.919, "p50_ms": 3.91,  "p95_ms": 5.64 },
+      { "engine": "qdrant-f32",  "serve_ram_mb": 885, "recall@10": 0.997, "recall@100": 0.981, "p50_ms": 2.62,  "p95_ms": 3.40 }
+    ]
+  },
+
+  "crossEngineGlove500k": {
+    "title": "GloVe-100-angular @ 500K cross-engine",
+    "engines": ["skeg-tq2", "lancedb", "qdrant-f32", "hnswlib", "chroma", "milvus-lite"],
+    "cells": [
+      { "engine": "skeg-tq2",    "serve_ram_mb": 31,  "recall@10": 0.975, "recall@100": 0.966, "p50_ms": 2.3 },
+      { "engine": "lancedb",     "serve_ram_mb": 946, "recall@10": 0.909, "recall@100": 0.729, "p50_ms": 14.4 },
+      { "engine": "qdrant-f32",  "serve_ram_mb": 611, "recall@10": 0.899, "recall@100": 0.823, "p50_ms": 2.0 },
+      { "engine": "hnswlib",     "serve_ram_mb": 344, "recall@10": 0.838, "recall@100": 0.709, "p50_ms": 0.5 },
+      { "engine": "chroma",      "serve_ram_mb": 616, "recall@10": 0.818, "recall@100": 0.696, "p50_ms": 2.6 },
+      { "engine": "milvus-lite", "serve_ram_mb": 118, "recall@10": 0.776, "recall@100": 0.729, "p50_ms": 1.4 }
+    ]
+  },
+
+  "tq2Gate": {
+    "title": "tq2 vs int8 default-tier gate across dims",
+    "tiers": ["skeg-int8", "skeg-tq2"],
+    "dims": ["glove-100d", "minilm-384d", "mnist-784d"],
+    "cells": [
+      { "dim": "glove-100d",  "tier": "skeg-int8", "n": 100000, "recall@10": 1.000, "recall@100": 0.998, "serve_ram_mb": 91,  "p50_ms": 1.96, "p95_ms": 2.08 },
+      { "dim": "glove-100d",  "tier": "skeg-tq2",  "n": 100000, "recall@10": 1.000, "recall@100": 0.994, "serve_ram_mb": 81,  "p50_ms": 1.99, "p95_ms": 2.19 },
+      { "dim": "minilm-384d", "tier": "skeg-int8", "n": 100000, "recall@10": 1.000, "recall@100": 1.000, "serve_ram_mb": 119, "p50_ms": 2.14, "p95_ms": 2.44 },
+      { "dim": "minilm-384d", "tier": "skeg-tq2",  "n": 100000, "recall@10": 0.999, "recall@100": 0.999, "serve_ram_mb": 124, "p50_ms": 2.36, "p95_ms": 3.01 },
+      { "dim": "mnist-784d",  "tier": "skeg-int8", "n": 60000,  "recall@10": 1.000, "recall@100": 1.000, "serve_ram_mb": 197, "p50_ms": 2.00, "p95_ms": 2.17 },
+      { "dim": "mnist-784d",  "tier": "skeg-tq2",  "n": 60000,  "recall@10": 1.000, "recall@100": 1.000, "serve_ram_mb": 168, "p50_ms": 2.00, "p95_ms": 2.16 }
+    ]
+  },
+
+  "scaling500k": {
+    "title": "Single-tenant scaling mxbai-1024 @ 500K",
+    "configs": ["skeg-int8", "skeg-tq4", "skeg-tq2", "skeg-tq1", "qdrant-f32", "qdrant-int8"],
+    "cells": [
+      { "config": "skeg-int8",   "peak_ram_mb": 794,  "recall@10": 0.9995, "p50_ms": 4.98, "p95_ms": 17.17 },
+      { "config": "skeg-tq4",    "peak_ram_mb": 998,  "recall@10": 0.9995, "p50_ms": 3.49, "p95_ms": 8.35 },
+      { "config": "skeg-tq2",    "peak_ram_mb": 901,  "recall@10": 1.0000, "p50_ms": 4.70, "p95_ms": 12.42 },
+      { "config": "skeg-tq1",    "peak_ram_mb": 1021, "recall@10": 1.0000, "p50_ms": 6.55, "p95_ms": 11.51 },
+      { "config": "qdrant-f32",  "peak_ram_mb": 5436, "recall@10": 0.9875, "p50_ms": 3.02, "p95_ms": 4.99 },
+      { "config": "qdrant-int8", "peak_ram_mb": 5051, "recall@10": 0.9455, "p50_ms": 2.36, "p95_ms": 4.45 }
+    ]
+  },
+
+  "multiTenantDensity": {
+    "title": "Multi-tenant density, 5 tenants x 100K",
+    "cells": [
+      { "config": "skeg (per-tenant index)",     "key": "skeg-tq2",    "peak_ram_mb": 200,  "recall": 1.000, "leaks": 0 },
+      { "config": "qdrant (collection per tenant)", "key": "qdrant-f32", "peak_ram_mb": 1818, "recall": 0.996, "leaks": 0 },
+      { "config": "qdrant (shared + filter)",     "key": "qdrant-int8", "peak_ram_mb": 3494, "recall": 0.957, "leaks": 0 }
+    ]
+  },
+
+  "sharedFilter": {
+    "title": "Shared index + per-tenant filter, 5 tenants x 100K",
+    "cells": [
+      { "config": "skeg-tq2 shared+filter", "key": "skeg-tq2",   "peak_ram_mb": 1471, "serve_rss_mb": 222,  "recall": 0.999, "leaks": 0 },
+      { "config": "qdrant shared+filter",   "key": "qdrant-f32", "peak_ram_mb": 4131, "serve_rss_mb": 2213, "recall": 0.941, "leaks": 0 }
+    ]
+  },
+
+  "container": {
+    "title": "Tight container, MNIST 60K, 256 MB cap",
+    "cap_mb": 256,
+    "cells": [
+      { "engine": "skeg-tq2",   "key": "skeg-tq2",   "peak_ram_mb": 156, "recall@10": 1.000, "verdict": "PASS" },
+      { "engine": "qdrant-f32", "key": "qdrant-f32", "peak_ram_mb": 473, "recall@10": 1.000, "verdict": "OOM" }
+    ]
+  },
+
+  "mnistTiers": {
+    "title": "MNIST recall / latency tiers",
+    "cells": [
+      { "config": "skeg-tq2",    "key": "skeg-tq2",    "peak_ram_mb": 156, "recall@10": 1.000, "recall@100": 1.000, "p50_ms": 2.07 },
+      { "config": "qdrant-f32",  "key": "qdrant-f32",  "peak_ram_mb": 423, "recall@10": 1.000, "recall@100": 0.999, "p50_ms": 2.33 },
+      { "config": "qdrant-int8", "key": "qdrant-int8", "peak_ram_mb": 460, "recall@10": 0.914, "recall@100": 0.955, "p50_ms": 2.05 }
+    ]
+  },
+
+  "isolation": {
+    "title": "Tenant isolation leak-fuzz",
+    "tenants": 8,
+    "vectors_per_tenant": 2000,
+    "rounds": 200,
+    "scoped_queries": 604,
+    "cross_tenant_leaks": 0,
+    "verdict": "PASS"
+  },
+
+  "latencyUnderLoad": {
+    "title": "Latency under load / noisy neighbor",
+    "cells": [
+      { "engine": "skeg (per-tenant, workers)", "key": "skeg-tq2",   "idle_p95_ms": 0.91, "under_load_p95_ms": 2.84 },
+      { "engine": "qdrant (shared + filter)",   "key": "qdrant-f32", "idle_p95_ms": 1.70, "under_load_p95_ms": 5.12 }
+    ]
+  },
+
+  "throughput": {
+    "title": "Throughput, 50K x 256-dim, tq2",
+    "cells": [
+      { "mode": "inline (--workers 0)", "qps": 1870 },
+      { "mode": "pool (--workers 8)",   "qps": 1560 }
+    ]
+  },
+
+  "cost": {
+    "title": "Cost, 50M x 1024-dim @ $4/GB-month",
+    "cells": [
+      { "engine": "skeg-tq2",   "key": "skeg-tq2",   "resident_gib": 19.4, "usd_per_year": 930 },
+      { "engine": "qdrant-f32", "key": "qdrant-f32", "resident_gib": 201,  "usd_per_year": 9647 }
+    ]
+  },
+
+  "coldStartBulkhead": {
+    "title": "Tiering cold-start bulkhead",
+    "note": "vindex reopen runs off the shard thread via spawn_blocking, so a cold reopen does not stall other tenants on the same shard.",
+    "cells": [
+      { "mode": "async reopen (shipped)", "reopen_ms": 13.4, "other_tenant_ops": 209, "other_tenant_p50_us": 59.5, "other_tenant_p99_us": 144 },
+      { "mode": "sync reopen (the bug)",  "reopen_ms": 13.4, "other_tenant_ops": 2,   "other_tenant_p50_us": null, "other_tenant_p99_us": 11300 }
+    ]
+  }
+}
