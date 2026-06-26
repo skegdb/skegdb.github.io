@@ -170,10 +170,12 @@ const chartData = {
       and generating. skeg-tq2's backend RSS stays at <strong>96-459 MB</strong>
       from 250K to 1M vectors; qdrant sits at <strong>0.9-1.8 GiB</strong> - 4 to
       10x leaner. (qdrant has no read-only mode, so this read-write setup is the
-      apples-to-apples comparison.) For static or batch-updated data, skeg's
-      read-only serve mode with PQ128 is leaner still: <strong>~67 MB at 1M</strong>.
-      On a 16 GiB laptop already running the model, that is breathing room vs
-      swapping.
+      apples-to-apples comparison.) Fully idle, with the index built but not under
+      query, skeg drops to <strong>47-76 MB</strong> (100K-500K; see the scaling
+      chart) - its working-set cache is returned to the OS between bursts. And for
+      static or batch-updated data, read-only serve mode with PQ128 is leaner
+      still: <strong>~67 MB at 1M</strong>. On a 16 GiB laptop already running the
+      model, that is breathing room vs swapping.
     </p>
   </BenchInsight>
 
