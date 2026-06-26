@@ -528,5 +528,62 @@
         ]
       }
     ]
+  },
+  "coresidence": {
+    "title": "backend RSS while a 3B LLM does RAG, same machine",
+    "note": "Ollama llama3.2:3b resident (~2.2 GiB) and generating every turn while the backend serves top-k retrievals concurrently (40 turns). Backend process RSS via ps -o rss; the LLM RAM is constant and not attributed to the backend. mxbai-1024 corpus.",
+    "ns": [
+      250000,
+      500000,
+      1000000
+    ],
+    "series": [
+      {
+        "engine": "skeg-tq2",
+        "key": "skeg-tq2",
+        "rss_p50": [
+          136,
+          231,
+          376
+        ],
+        "rss_max": [
+          155,
+          262,
+          444
+        ],
+        "ret_p50": [
+          2.3,
+          4.2,
+          12.1
+        ]
+      },
+      {
+        "engine": "qdrant-f32",
+        "key": "qdrant-f32",
+        "rss_p50": [
+          1218,
+          2364,
+          1829
+        ],
+        "rss_max": [
+          1327,
+          2368,
+          2672
+        ],
+        "ret_p50": [
+          15.6,
+          4.3,
+          70.2
+        ]
+      }
+    ]
+  },
+  "chroma500k": {
+    "engine": "chroma (HNSW)",
+    "key": "chroma",
+    "n": 500000,
+    "serve_ram_mb": 2543,
+    "recall@10": 0.98,
+    "p50_ms": 4.91
   }
 }
