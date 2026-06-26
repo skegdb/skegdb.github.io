@@ -165,38 +165,43 @@ const chartData = {
   <!-- ============ co-residence with a local LLM ============ -->
   <BenchInsight kind="finding" label="LLM on the same machine">
     <p>
-      <strong>A 3B LLM and the vector store, co-resident.</strong> With
-      <code>llama3.2:3b</code> loaded (~2.2 GiB) and generating while the backend
-      serves RAG retrievals concurrently, skeg-tq2's backend RSS stays at
-      <strong>376 MB at 1M vectors</strong> (p50; 444 MB max) versus qdrant's
-      <strong>~1.8 GiB</strong> (2.7 GiB max). On a 16 GiB laptop already running
-      the model, that is the difference between breathing room and swapping.
-      Retrieval stays faster too: 12 ms vs 70 ms p50 at 1M.
+      <strong>A 3B LLM and the vector store, co-resident.</strong> Both run as
+      live read-write servers while <code>llama3.2:3b</code> is resident (~2.2 GiB)
+      and generating. skeg-tq2's backend RSS stays at <strong>96-459 MB</strong>
+      from 250K to 1M vectors; qdrant sits at <strong>0.9-1.8 GiB</strong> - 4 to
+      10x leaner. (qdrant has no read-only mode, so this read-write setup is the
+      apples-to-apples comparison.) For static or batch-updated data, skeg's
+      read-only serve mode with PQ128 is leaner still: <strong>~67 MB at 1M</strong>.
+      On a 16 GiB laptop already running the model, that is breathing room vs
+      swapping.
     </p>
   </BenchInsight>
 
   <section class="bench-section">
     <div class="bench-section-head">
-      <h2>co-residence · backend RSS under concurrent RAG</h2>
+      <h2>co-residence · backend RAM under concurrent RAG</h2>
       <p class="bench-section-text">
-        Backend process RSS while a local 3B LLM is resident and generating and
-        the store serves top-k retrievals (40 turns, mxbai-1024). The LLM RAM is
-        constant and not counted here. skeg stays a few hundred MB to 1M vectors;
-        qdrant sits in the GiB. p50 shown; the table has max + retrieval latency.
+        Backend RSS while a local 3B LLM is resident and generating and the store
+        serves top-k retrievals, both as live read-write servers (mxbai-1024; the
+        LLM RAM is constant and not counted). The line is RSS at-rest (store
+        quiescent between turns, where skeg's decay timer returns the working
+        set); the table adds sustained (continuous-load median) and max. recall@10
+        is unchanged by co-residence: skeg-tq2 ~1.0, qdrant ~0.99 (see the
+        single-tenant charts).
       </p>
     </div>
     <div id="chart-coresidence" data-chart class="bench-chart"></div>
     <details class="bench-details">
-      <summary>all numbers · LLM co-resident RAG load</summary>
+      <summary>all numbers · LLM co-resident RAG load (rw servers)</summary>
       <div class="bench-table-wrap">
         <table class="bench-table">
           <thead>
             <tr>
               <th>engine</th>
               <th>vectors</th>
-              <th>RSS p50 MB</th>
-              <th>RSS max MB</th>
-              <th>retrieval p50 ms</th>
+              <th>at-rest MB</th>
+              <th>sustained MB</th>
+              <th>max MB</th>
             </tr>
           </thead>
           <tbody>
@@ -204,9 +209,9 @@ const chartData = {
               <tr>
                 <td><span class="engine-dot" style={`background:${palette[s.key] || '#999'}`}></span>{s.engine}</td>
                 <td class="num">{(n / 1000)}K</td>
-                <td class="num">{fmtInt(s.rss_p50[i])}</td>
-                <td class="num">{fmtInt(s.rss_max[i])}</td>
-                <td class="num">{fmt(s.ret_p50[i], 1)}</td>
+                <td class="num">{fmtInt(s.rest[i])}</td>
+                <td class="num">{fmtInt(s.sustained[i])}</td>
+                <td class="num">{fmtInt(s.max[i])}</td>
               </tr>
             )))}
           </tbody>
@@ -1014,7 +1019,7 @@ const chartData = {
             name: s.engine, type: 'line', smooth: false, symbol: 'circle', symbolSize: 8,
             itemStyle: { color: paletteFor(s.key) },
             lineStyle: { color: paletteFor(s.key), width: 2.5 },
-            emphasis: { focus: 'series' }, data: s.rss_p50,
+            emphasis: { focus: 'series' }, data: s.rest,
           };
         });
         return opts;

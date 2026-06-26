@@ -530,8 +530,8 @@
     ]
   },
   "coresidence": {
-    "title": "backend RSS while a 3B LLM does RAG, same machine",
-    "note": "Ollama llama3.2:3b resident (~2.2 GiB) and generating every turn while the backend serves top-k retrievals concurrently (40 turns). Backend process RSS via ps -o rss; the LLM RAM is constant and not attributed to the backend. mxbai-1024 corpus.",
+    "title": "backend RAM with a 3B LLM doing RAG, same machine",
+    "note": "Both engines run as live read-write servers (rw mode) while llama3.2:3b is resident (~2.2 GiB) and generating, and the store serves top-k retrievals (40 turns x 3 windows + warmup). qdrant has no read-only mode, so rw is the apples-to-apples comparison. Lines show RSS at-rest (store quiescent between turns, p50 - where skeg's decay timer returns the working set); the table also lists sustained (continuous-load median) and max. skeg's own read-only serve mode (mmap tier) is leaner still (~67 MB at 1M, pq128). recall@10 is unchanged by co-residence: skeg-tq2 ~1.0, qdrant ~0.99 (see the single-tenant charts).",
     "ns": [
       250000,
       500000,
@@ -541,39 +541,39 @@
       {
         "engine": "skeg-tq2",
         "key": "skeg-tq2",
-        "rss_p50": [
-          136,
-          231,
-          376
+        "rest": [
+          96,
+          253,
+          459
         ],
-        "rss_max": [
-          155,
-          262,
-          444
+        "sustained": [
+          138,
+          260,
+          459
         ],
-        "ret_p50": [
-          2.3,
-          4.2,
-          12.1
+        "max": [
+          142,
+          267,
+          459
         ]
       },
       {
         "engine": "qdrant-f32",
         "key": "qdrant-f32",
-        "rss_p50": [
-          1218,
-          2364,
-          1829
+        "rest": [
+          938,
+          1612,
+          1777
         ],
-        "rss_max": [
-          1327,
+        "sustained": [
+          1204,
+          1854,
+          1451
+        ],
+        "max": [
+          1322,
           2368,
-          2672
-        ],
-        "ret_p50": [
-          15.6,
-          4.3,
-          70.2
+          2119
         ]
       }
     ]
