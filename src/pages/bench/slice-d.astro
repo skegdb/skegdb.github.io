@@ -58,12 +58,11 @@ const fmtSize = (n: number) => n.toLocaleString();
     <p class="hero-eyebrow">slice D · co-residence</p>
     <h1>vector store + LLM on the same machine</h1>
     <p class="hero-sub">
-      Slices A/B/C measure each engine in isolation. Slice D adds the thing
-      that matters on a personal-AI laptop: <strong>an LLM is also running</strong>.
-      Llama 3.2 3B (Q4_K_M, ~2.2 GB) answers 50 RAG turns while each vector
-      store serves retrievals from a corpus that grows from 10K to 1M. The
-      question isn't "which engine is fastest" · it's "which one lets the
-      LLM finish its sentence".
+      Slices A, B and C measure each engine in isolation. Here, Llama 3.2 3B
+      (Q4_K_M, ~2.2 GB) answers 50 RAG turns on the same machine while each
+      vector store serves retrieval requests. The corpus grows from 10K to 1M
+      vectors. The report tracks memory use and whether the model completes
+      the workload.
     </p>
   </header>
 
@@ -155,10 +154,10 @@ const fmtSize = (n: number) => n.toLocaleString();
             size, not the access pattern.
           </p>
           <p class="bench-section-text">
-            Both numbers are real. <strong>Production high-QPS</strong>:
-            skeg 419 MB vs qdrant 4 147 MB (10× gap). <strong>Personal-AI
-            typical RAG</strong>: skeg 63 MB vs qdrant 1 893 MB (30× gap,
-            because qdrant can't compress the way skeg can).
+            <strong>Sustained query load</strong> measured 419 MB for Skeg and
+            4,147 MB for Qdrant (10× difference). <strong>RAG with a local
+            model</strong> measured 63 MB for Skeg and 1,893 MB for Qdrant
+            (30× difference).
           </p>
         </div>
         <div id="chart-regime" data-chart class="bench-chart"></div>

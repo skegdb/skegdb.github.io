@@ -1,0 +1,362 @@
+---
+import BenchLayout from '~/layouts/BenchLayout.astro';
+import DatasetExplorer from '~/components/DatasetExplorer.astro';
+import EmbeddingComparison from '~/components/EmbeddingComparison.astro';
+import data from '~/data/bench/release-0.8.json';
+
+type Chart = {
+  id: string;
+  title: string;
+  description: string;
+  x: string[];
+  unit: string;
+  kind: 'bar' | 'line' | 'stack' | 'dot' | 'frontier';
+  layout?: 'horizontal';
+  category?: string;
+  series: { name: string; values: (number | null)[]; latency?: number[] }[];
+  range?: [number, number];
+};
+
+const { local, cloud } = data;
+const levels = ['100', '200', '400'] as const;
+const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+const profiles = local.configurations.map(config => config.label);
+const profileColors = ['#c7ff3d', '#82d8f5', '#f2c37c', '#c7aaf6'];
+const byProfile = (name: string, field: (run: typeof local.configurations[number]['runs'][number]) => number) =>
+  ({ name, values: local.configurations.map(config => median(config.runs.map(field))) });
+
+const localCharts: Chart[] = [
+  {
+    id: 'recall',
+    title: 'Recall versus latency',
+    description: 'Median recall@10 and p50 latency at l_search 100, 200, and 400, from left to right. The recall axis spans 98.7–99.7%.',
+    x: [...levels],
+    category: 'l_search',
+    unit: 'Recall@10',
+    kind: 'frontier',
+    range: [98.7, 99.7],
+    series: local.configurations.map(config => ({
+      name: config.label,
+      values: levels.map(l => median(config.runs.map(run => run.query[l].r10))),
+      latency: levels.map(l => median(config.runs.map(run => run.query[l].p50))),
+    })),
+  },
+  { id: 'latency', title: 'Query latency at l=200', description: 'Medians of the per-run percentiles. The three runs per configuration share a host with other workloads.', x: profiles, unit: 'ms', kind: 'dot', layout: 'horizontal', series: [byProfile('p50', r => r.query['200'].p50), byProfile('p95', r => r.query['200'].p95), byProfile('p99', r => r.query['200'].p99)] },
+  { id: 'throughput', title: 'Throughput by client count', description: 'Median queries per second for k=10 and l=200, at each tested concurrency. Each point uses its own observations.', x: ['1', '4', '16', '32'], unit: 'QPS', kind: 'line', category: 'Concurrent clients', series: local.configurations.map(config => ({ name: config.label, values: (['1', '4', '16', '32'] as const).map(clients => median(config.runs.map(run => run.qps.sweep[clients]))) })) },
+  { id: 'filter', title: 'Filtered query latency', description: 'Median p50 at k=10 and l=200. The benchmark assigns filters to approximately 10% and 1% of rows. All four shown configurations recorded recall@10 of 1.0 in these two cases.', x: profiles, unit: 'ms', kind: 'bar', layout: 'horizontal', series: [byProfile('10% of rows', r => r.filter['g = 3'].p50), byProfile('1% of rows', r => r.filter['r = 7'].p50)] },
+  { id: 'build', title: 'Build phases', description: 'Ingest time is derived from the row count and per-run ingest rate. The stack adds the two phase medians.', x: profiles, unit: 'seconds', kind: 'stack', layout: 'horizontal', series: [byProfile('Ingest', r => local.rows / r.build.ingest_rows_s), byProfile('Consolidate', r => r.build.consolidate_s)] },
+  { id: 'restart', title: 'Restart after churn', description: 'The first PING and the first completed vector search mark separate stages of restart.', x: profiles, unit: 'seconds', kind: 'dot', layout: 'horizontal', series: [byProfile('To first PING', r => r.restart.to_ping_s), byProfile('To first search', r => r.restart.to_first_search_s)] },
+  { id: 'rss', title: 'Process memory', description: 'Peak RSS during build and RSS at rest after build and after restart. RSS is measured for the server process.', x: profiles, unit: 'MiB', kind: 'bar', layout: 'horizontal', series: [byProfile('Build peak', r => r.build.peak_rss_mib), byProfile('After build', r => r.build.rest_rss_mib), byProfile('After restart', r => r.restart.rss_mib)] },
+];
+
+const short = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+const format = (value: number | null, unit: string) => value === null ? '—' : unit === 'Recall@10' ? value.toFixed(4) : short.format(value);
+---
+
+<BenchLayout title="Skeg 0.8 benchmarks · November 2026" description="November 2026 Skeg 0.8 development benchmarks, with charts, data and provenance." slice="release-08">
+  <header class="report-intro">
+    <p class="bench-kicker">November 2026</p>
+    <h1 class="bench-title">Skeg 0.8 benchmarks</h1>
+    <p class="bench-intro">Recall and latency across five Linux embedding workloads and four Skeg configurations on macOS.</p>
+    <div class="report-controls">
+      <nav class="jump-links" aria-label="Report sections">
+        <a href="#reading">What was measured</a>
+        <a href="#comparison-datasets">Dataset guide</a>
+        <a href="#profiles">Mixedbread on macOS</a>
+        <a href="#cloud">All Linux datasets</a>
+        <a href="/bench/release-0.8.json" download>Download JSON <span aria-hidden="true">↓</span></a>
+        <a href="#method">Method and provenance</a>
+      </nav>
+      <a class="bench-action" href="#embeddings">Compare embedding workloads <span aria-hidden="true">↓</span></a>
+    </div>
+  </header>
+
+  <section class="read-report" id="reading" aria-labelledby="read-report-title">
+    <header>
+      <h2 id="read-report-title">What was measured</h2>
+      <p>A single client times 1,000 held-out vector queries from request to reply. The harness checks their results against an exhaustive cosine search. These measurements use two Skeg 0.8 development builds from November 2026.</p>
+    </header>
+    <dl class="metric-guide">
+      <div><dt>Recall@10</dt><dd>The average share of the exact top ten neighbours that Skeg returns in its top ten. Nine matches out of ten gives 90% recall for that query.</dd></div>
+      <div><dt>p50 and p99</dt><dd>p50 is the median query time. About 99% of queries finish within the p99 time.</dd></div>
+      <div><dt><code>l_search</code></dt><dd>Controls how broadly the graph walk explores candidates.</dd></div>
+    </dl>
+  </section>
+
+  <section class="campaign" id="embeddings" aria-labelledby="title-embeddings">
+    <header class="campaign-head">
+      <h2 id="title-embeddings">Embedding workloads</h2>
+      <p>The five Linux workloads each use 99,000–100,000 vectors, a TQ2 disk index and <code>k=100</code>. Corpora and vector dimensions vary. Each workload has its own exact-search results. Compare the curves within one host, where the hardware and shard count stay fixed.</p>
+    </header>
+    <EmbeddingComparison />
+  </section>
+
+  <section class="campaign" id="profiles" aria-labelledby="title-profiles">
+    <header class="campaign-head">
+      <h2 id="title-profiles">Mixedbread on macOS</h2>
+      <p>Here the 100,000-vector <a href="#dataset-mxbai-100k">Mixedbread</a> workload stays fixed while the Skeg profile or codec changes. Look for profiles that reach similar recall and compare their latency. Each configuration was run on three fresh stores with four shards on a shared macOS host on 15 November 2026.</p>
+    </header>
+    <div class="chart-grid">
+      {localCharts.map(chart => (
+        <figure class:list={['chart-panel', { 'chart-lead': chart.kind === 'frontier' }]}>
+          <figcaption>
+            <h3>{chart.title}</h3>
+            <p>{chart.description}</p>
+          </figcaption>
+          {chart.kind === 'frontier' && (
+            <div class="profile-controls" role="group" aria-label="Visible profiles" hidden>
+              {chart.series.map((series, i) => (
+                <button type="button" data-profile={series.name} aria-pressed="true" style={`--series-color:${profileColors[i]}`}>
+                  <span aria-hidden="true"></span>{series.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div data-result-chart={chart.id} class="result-chart" aria-hidden="true"></div>
+          <details class="measurement">
+            <summary>{chart.kind === 'frontier' ? 'Recall and latency values' : `Chart values · ${chart.unit}`}</summary>
+            <div class="table-wrap" role="region" tabindex="0" aria-label={`${chart.title} data table`}>
+              <table>
+                <thead><tr><th scope="col">{chart.category ?? 'Configuration'}</th>{chart.series.map(series => <th scope="col">{series.name}</th>)}</tr></thead>
+                <tbody>{chart.x.map((label, i) => <tr><th scope="row">{label}</th>{chart.series.map(series => <td>{format(series.values[i], chart.unit)}{series.latency && ` / ${format(series.latency[i], 'ms')} ms`}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          </details>
+        </figure>
+      ))}
+    </div>
+
+    <details class="measurement range-table">
+      <summary>Search run ranges at l=200</summary>
+      <div class="table-wrap" role="region" tabindex="0" aria-label="Search run ranges">
+        <table>
+          <thead><tr><th scope="col">Profile / codec</th><th scope="col">Recall@10</th><th scope="col">p50 (ms)</th><th scope="col">p99 (ms)</th></tr></thead>
+          <tbody>{local.configurations.map(config => (
+            <tr><th scope="row">{config.label}</th>{(['r10', 'p50', 'p99'] as const).map(metric => {
+              const values = config.runs.map(run => run.query['200'][metric]);
+              const unit = metric === 'r10' ? 'Recall@10' : 'ms';
+              return <td>{format(Math.min(...values), unit)}–{format(Math.max(...values), unit)}</td>;
+            })}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="campaign" id="cloud" aria-labelledby="title-cloud">
+    <header class="campaign-head">
+      <h2 id="title-cloud">Linux datasets</h2>
+      <p>Explore the wider Linux campaign, including GloVe and MS MARCO. Pick a host and metric, then select a dataset to see the run and its source. Each dataset has one observation per host on 18–19 November 2026. Query latency uses <code>k=100</code>. Peak throughput comes from a separate concurrency sweep at <code>k=10</code> and <code>l_search=200</code>.</p>
+    </header>
+    <DatasetExplorer />
+    {cloud.hosts.map(host => (
+      <details class="measurement range-table">
+        <summary>Linux {host.arch} · dataset results at l=200</summary>
+        <div class="table-wrap" role="region" tabindex="0" aria-label={`Linux ${host.arch} measurements`}>
+          <table>
+            <thead><tr><th scope="col">Dataset</th><th scope="col">Rows</th><th scope="col">Recall@10</th><th scope="col">p99 (ms)</th><th scope="col">Ingest (rows/s)</th><th scope="col">Consolidate (s)</th><th scope="col">Restart to first search (s)</th></tr></thead>
+            <tbody>{host.runs.map(run => (
+              <tr><th scope="row">{run.dataset}</th><td>{short.format(run.rows)}</td><td>{format(run.query['200'].r10, 'Recall@10')}</td><td>{short.format(run.query['200'].p99)}</td><td>{short.format(Math.round(run.build.ingest_rows_s))}</td><td>{short.format(run.build.consolidate_s)}</td><td>{format(run.restart?.to_first_search_s ?? null, 'seconds')}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </details>
+    ))}
+  </section>
+
+  <section class="campaign" id="method" aria-labelledby="method-title">
+    <h2 id="method-title">Method and provenance</h2>
+    <p>Recall is measured against exhaustive cosine search. The local charts use the median of three observations. The download includes individual measurements for the four plotted configurations and all {cloud.hosts.reduce((total, host) => total + host.runs.length, 0)} Linux dataset runs shown here.</p>
+    <p>GloVe build, query and filter phases finished on both Linux hosts. The churn harness stopped before completing, so churn and restart are marked missing for those cells. The Linux explorer keeps the two host configurations separate.</p>
+    <dl class="builds">
+      <div><dt>macOS · <code>{local.commit}</code></dt><dd><code>{local.sha256}</code></dd></div>
+      {cloud.hosts.map(host => <div><dt>Linux {host.arch} · <code>{cloud.commit.slice(0, 8)}</code></dt><dd><code>{host.sha256}</code></dd></div>)}
+    </dl>
+    <p>The earlier macOS comparison with 0.7.2 used unequal shard counts. The data on this page compares configurations within the 0.8 development series. Both builds predate the release tag.</p>
+  </section>
+
+  <script is:inline id="november-chart-data" type="application/json" set:html={JSON.stringify({ charts: localCharts, profileColors })} />
+  <script is:inline>
+    (() => {
+      const source = document.getElementById('november-chart-data');
+      if (!source || !window.echarts) return;
+
+      const { charts, profileColors } = JSON.parse(source.textContent);
+      const metricColors = ['#c7ff3d', '#82d8f5', '#c7aaf6'];
+      const symbols = ['circle', 'diamond', 'triangle', 'rect'];
+      const labels = {
+        axisLine: { lineStyle: { color: '#465044' } },
+        axisTick: { show: false },
+        axisLabel: { color: '#a5aa9f', hideOverlap: true },
+        nameTextStyle: { color: '#b7bcb1' },
+      };
+      const gridLines = { lineStyle: { color: '#2a3027' } };
+      const observer = new ResizeObserver(entries => {
+        for (const { target } of entries) window.echarts.getInstanceByDom(target)?.resize();
+      });
+
+      for (const spec of charts) {
+        const target = document.querySelector(`[data-result-chart="${spec.id}"]`);
+        if (!target) continue;
+        target.classList.add('chart-active');
+        const chart = window.echarts.init(target, null, { renderer: 'svg' });
+        const frontier = spec.kind === 'frontier';
+        const horizontal = spec.layout === 'horizontal';
+        const line = spec.kind === 'line' || frontier;
+        const dots = spec.kind === 'dot';
+        const unit = spec.unit === 'seconds' ? 's' : spec.unit;
+        const categoryAxis = { ...labels, type: 'category', data: spec.x, inverse: horizontal };
+        const valueAxis = {
+          ...labels,
+          type: 'value',
+          min: spec.range?.[0] ?? 0,
+          max: spec.range?.[1],
+          splitLine: gridLines,
+          axisLabel: {
+            ...labels.axisLabel,
+            formatter: value => unit === 'Recall@10' ? `${value.toFixed(1)}%` : `${value} ${unit}`,
+          },
+        };
+        const series = spec.series.map((series, i) => ({
+          name: series.name,
+          type: line ? 'line' : dots ? 'scatter' : 'bar',
+          data: frontier
+            ? series.latency.map((ms, j) => ({
+                name: `l_search ${spec.x[j]}`,
+                value: [ms, Number((series.values[j] * 100).toFixed(4))],
+              }))
+            : dots ? series.values.map((value, j) => [value, spec.x[j]]) : series.values,
+          stack: spec.kind === 'stack' ? 'phases' : undefined,
+          symbol: symbols[i],
+          symbolSize: frontier ? 11 : 8,
+          showSymbol: true,
+          lineStyle: { width: frontier ? 2.5 : 2 },
+          barMaxWidth: 14,
+          emphasis: { focus: 'series' },
+        }));
+        chart.setOption({
+          animation: false,
+          color: line ? profileColors : metricColors,
+          textStyle: { fontFamily: 'Geist Mono, monospace', color: '#f2f2ec', fontSize: 11 },
+          tooltip: {
+            trigger: frontier || dots ? 'item' : 'axis',
+            confine: true,
+            backgroundColor: '#171b14',
+            borderColor: '#3e4837',
+            textStyle: { color: '#f2f2ec' },
+            ...(frontier && {
+              formatter: ({ seriesName, name, value }) => `${seriesName}<br>${name}<br>${value[0]} ms · ${value[1]}% recall@10`,
+            }),
+            ...(dots && { formatter: ({ seriesName, value }) => `${value[1]}<br>${seriesName} · ${value[0]} ${unit}` }),
+          },
+          legend: {
+            show: !frontier,
+            bottom: 1,
+            itemWidth: 13,
+            itemHeight: 8,
+            itemGap: 14,
+            textStyle: { color: '#c9cdc3', fontSize: 10 },
+            inactiveColor: '#7c8178',
+          },
+          grid: { top: 14, left: 9, right: 24, bottom: frontier ? 46 : line ? 65 : 50, containLabel: true },
+          xAxis: frontier
+            ? { ...valueAxis, scale: true, min: undefined, max: undefined, name: 'Median p50 latency', nameLocation: 'middle', nameGap: 30, axisLabel: { ...labels.axisLabel, formatter: '{value} ms' } }
+            : horizontal ? valueAxis : { ...categoryAxis, name: spec.category, nameLocation: 'middle', nameGap: 28 },
+          yAxis: horizontal ? categoryAxis : valueAxis,
+          series,
+        });
+        if (frontier) {
+          const controls = target.previousElementSibling;
+          controls.hidden = false;
+          for (const button of controls.querySelectorAll('button')) {
+            button.addEventListener('click', () => {
+              const active = button.getAttribute('aria-pressed') === 'true';
+              chart.dispatchAction({ type: active ? 'legendUnSelect' : 'legendSelect', name: button.dataset.profile });
+              button.setAttribute('aria-pressed', String(!active));
+            });
+          }
+        }
+        observer.observe(target);
+      }
+    })();
+  </script>
+</BenchLayout>
+
+<style>
+  .report-intro .bench-title { font-size: clamp(42px, 5.7vw, 84px); }
+  .report-controls {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 24px;
+    margin-top: 30px;
+    padding-block: 14px;
+    border-block: 1px solid var(--border);
+  }
+  .jump-links { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+  .jump-links a { border: 0; color: var(--mute); font: 12px/1.5 var(--mono); }
+  .read-report { margin-top: clamp(38px, 5vw, 68px); }
+  .read-report header { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 12px 24px; align-items: baseline; margin-bottom: 16px; }
+  .read-report h2 { margin: 0; font-size: clamp(25px, 3.6vw, 40px); line-height: 1.1; letter-spacing: -.045em; }
+  .read-report p, .metric-guide dd { margin: 0; color: var(--mute); }
+  .metric-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border: 1px solid var(--rule); background: var(--bg-card); }
+  .metric-guide div { padding: clamp(12px, 2.25vw, 24px); }
+  .metric-guide div + div { border-left: 1px solid var(--rule); }
+  .metric-guide dt { margin-bottom: 6px; font-size: 16px; font-weight: 600; }
+  .campaign { margin-top: clamp(38px, 5vw, 68px); scroll-margin-top: 20px; }
+  .campaign h2 { font-size: clamp(29px, 4vw, 49px); line-height: 1.06; letter-spacing: -.05em; margin: 0; }
+  .campaign-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; }
+  .campaign-head p, .campaign > p { max-width: 75ch; margin: 0; color: var(--mute); }
+  .campaign > p { margin-top: 1em; }
+  .chart-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 20px; }
+  .chart-panel { margin: 0; padding: clamp(12px, 2.3vw, 28px); border: 1px solid var(--border); background: var(--bg-card); min-width: 0; }
+  .chart-panel h3 { font-size: clamp(18px, 2vw, 25px); letter-spacing: -.035em; margin: 0 0 .35rem; }
+  .chart-panel figcaption p { max-width: 76ch; color: var(--mute); font-size: 14px; margin: 0; }
+  .chart-lead { grid-column: 1 / -1; background: var(--bg-emphasis); border-color: #3b4932; }
+  .chart-lead h3 { font-size: clamp(23px, 3.5vw, 40px); }
+  .profile-controls:not([hidden]) { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+  .profile-controls button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    min-height: 36px;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    color: var(--fg);
+    cursor: pointer;
+    font: 11px/1.4 var(--mono);
+  }
+  .profile-controls button:hover, .profile-controls button:focus-visible { outline: 1px solid var(--series-color); outline-offset: 2px; }
+  .profile-controls button[aria-pressed=false] { color: var(--mute); }
+  .profile-controls span { width: 8px; height: 8px; background: var(--series-color); border-radius: 50%; }
+  .profile-controls button:nth-child(2) span { transform: rotate(45deg); border-radius: 0; }
+  .profile-controls button:nth-child(3) span { clip-path: polygon(50% 0, 0 100%, 100% 100%); border-radius: 0; }
+  .profile-controls button:nth-child(4) span { border-radius: 0; }
+  .profile-controls button[aria-pressed=false] span { opacity: .35; }
+  .result-chart { display: none; }
+  .result-chart.chart-active { display: block; height: var(--plot-height, 238px); margin-top: 16px; }
+  .chart-lead .result-chart { --plot-height: clamp(300px, 32vw, 440px); }
+  .measurement { border-top: 1px solid var(--border); margin-top: 8px; }
+  .measurement summary { min-height: 36px; padding-top: 10px; cursor: pointer; color: var(--mute); font: 12px/1.5 var(--mono); }
+  .measurement summary:hover, .measurement[open] summary { color: var(--accent); }
+  .range-table { border: 1px solid var(--border); padding: .2rem 1rem; margin-top: 16px; background: var(--bg-card); }
+  .table-wrap { overflow-x: auto; margin-block: .4rem .6rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { padding: .5rem .6rem; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child { text-align: left; }
+  .builds { margin-block: 22px; border-block: 1px solid var(--rule); }
+  .builds div { padding: 12px 0; }
+  .builds div + div { border-top: 1px solid var(--border); }
+  .builds dd { overflow-wrap: anywhere; margin: .25rem 0 0; color: var(--mute); }
+  .builds dt { font-weight: 600; }
+  @media (max-width: 830px) {
+    .chart-grid { grid-template-columns: minmax(0, 1fr); }
+    .read-report header { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .metric-guide { grid-template-columns: minmax(0, 1fr); }
+    .metric-guide div + div { border-left: 0; border-top: 1px solid var(--rule); }
+  }
+</style>

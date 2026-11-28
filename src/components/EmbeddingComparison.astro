@@ -1,0 +1,279 @@
+---
+import data from '~/data/bench/release-0.8.json';
+import { benchmarkDatasets } from '~/lib/benchmark-datasets';
+
+const workloads = [
+  { id: 'mxbai-100k', label: 'Mixedbread', dimensions: 1024, color: '#c7ff3d', symbol: 'circle' },
+  { id: 'arxiv-instructorxl', label: 'INSTRUCTOR-XL', dimensions: 768, color: '#8cb9cc', symbol: 'diamond' },
+  { id: 'gemini-001', label: 'Gemini', dimensions: 768, color: '#c5ad84', symbol: 'triangle' },
+  { id: 'openai3-large', label: 'OpenAI 3 Large', dimensions: 1536, color: '#a99bbe', symbol: 'rect' },
+  { id: 'wiki-cohere-shuf', label: 'Cohere', dimensions: 1024, color: '#c49e99', symbol: 'pin' },
+];
+const levels = ['100', '200', '400', '800'] as const;
+const hosts = data.cloud.hosts.map(host => ({
+  ...host,
+  runs: workloads.flatMap(workload => {
+    const run = host.runs.find(run => run.dataset === workload.id);
+    return run ? [{ ...workload, rows: run.rows, queries: run.queries, query: run.query }] : [];
+  }),
+}));
+const firstHost = hosts[0];
+const initial = firstHost.runs[0].query['200'];
+const wider = firstHost.runs[0].query['800'];
+const number = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+const formatRecall = (recall: number) => `${(recall * 100).toFixed(2)}%`;
+const lowestRecall = Math.min(...hosts.flatMap(host => host.runs.flatMap(run => levels.map(level => run.query[level].r10 * 100))));
+const recallMin = Math.floor(lowestRecall * 5 + 1e-8) / 5;
+const archLabel = (arch: string) => arch === 'arm64' ? 'ARM64' : arch;
+---
+
+<div class="embedding-panel">
+  <div class="comparison-example">
+    <div>
+      <h3>Read the two charts together</h3>
+      <p>On Linux {archLabel(firstHost.arch)}, follow the green Mixedbread line from <code>l_search 200</code> to <code>800</code>. Recall@10 rises from <strong>{formatRecall(initial.r10)} to {formatRecall(wider.r10)}</strong>. Select 800 to see p99 rise from <strong>{number.format(initial.p99)} to {number.format(wider.p99)} ms</strong>.</p>
+    </div>
+    <button type="button" data-show-example hidden>Show x86_64 at 800</button>
+  </div>
+  <div class="embedding-controls" data-embedding-controls hidden>
+    <label>Host
+      <select data-embedding-host>
+        {hosts.map(host => <option value={host.arch}>Linux {archLabel(host.arch)} · {host.shards} shards</option>)}
+      </select>
+    </label>
+    <fieldset>
+      <legend>Search breadth (<code>l_search</code>)</legend>
+      <div class="effort-options">
+        {levels.map(level => <button type="button" data-embedding-effort={level} aria-pressed={level === '200'}>{level}</button>)}
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="mixedbread">
+    <div>
+      <h3>Mixedbread · mxbai-embed-large-v1</h3>
+      <p>100,000 vectors · 1,024 dimensions <a href="#dataset-mxbai-100k">Dataset reference <span aria-hidden="true">↓</span></a></p>
+    </div>
+    <dl aria-live="polite">
+      <div><dt>Recall@10</dt><dd data-mixedbread-recall>{formatRecall(initial.r10)}</dd></div>
+      <div><dt>p50 latency</dt><dd data-mixedbread-p50>{number.format(initial.p50)} ms</dd></div>
+      <div><dt>p99 latency</dt><dd data-mixedbread-p99>{number.format(initial.p99)} ms</dd></div>
+      <div class="comparison-context"><dt>Run</dt><dd data-embedding-shards>Linux {archLabel(firstHost.arch)} · {firstHost.shards} shards · l_search 200</dd></div>
+    </dl>
+  </div>
+
+  <div class="comparison-plots">
+    <figure>
+      <figcaption>
+        <h3>Recall as search widens</h3>
+        <p>Each line follows one workload. The recall scale starts at {number.format(recallMin)}% to show small differences.</p>
+      </figcaption>
+      <div class="comparison-plot" data-embedding-chart="recall" aria-hidden="true"></div>
+    </figure>
+    <figure>
+      <figcaption>
+        <h3>Latency at <span data-embedding-level>l_search 200</span></h3>
+        <p>Muted bars show p50. Brighter bars show p99. The scale stays fixed as you change search breadth within a host.</p>
+      </figcaption>
+      <div class="comparison-plot" data-embedding-chart="latency" aria-hidden="true"></div>
+    </figure>
+  </div>
+
+  <section class="dataset-guide" id="comparison-datasets" aria-labelledby="comparison-datasets-title">
+    <h3 id="comparison-datasets-title">What’s in each dataset?</h3>
+    <p>The corpus contains the vectors in the index. Separate query vectors search that index. Dimensions count the coordinates in each vector. Follow a dataset link for its corpus or embedding model.</p>
+    <ul class="workload-key">
+      {firstHost.runs.map(run => (
+        <li style={`--workload-color:${run.color}`}>
+          <div>
+            <a href={`#dataset-${run.id}`}>{run.label} <span aria-hidden="true">↓</span></a>
+            <small>{number.format(run.rows)} indexed vectors · {number.format(run.queries)} queries · {number.format(run.dimensions)} dimensions</small>
+          </div>
+          <p>{benchmarkDatasets[run.id].note}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <details class="comparison-values">
+    <summary>Values by host and search breadth</summary>
+    {hosts.map(host => (
+      <div class="comparison-table" role="region" tabindex="0" aria-label={`Linux ${archLabel(host.arch)} comparison data`}>
+        <table>
+          <caption>Linux {archLabel(host.arch)} · {host.shards} shards. Each cell shows recall@10 and p50 / p99 latency in ms.</caption>
+          <thead><tr><th scope="col">Workload</th>{levels.map(level => <th scope="col">l_search {level}</th>)}</tr></thead>
+          <tbody>{host.runs.map(run => (
+            <tr><th scope="row">{run.label}</th>{levels.map(level => {
+              const query = run.query[level];
+              return <td>{formatRecall(query.r10)}<br />{number.format(query.p50)} / {number.format(query.p99)} ms</td>;
+            })}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+    ))}
+  </details>
+</div>
+
+<script is:inline id="embedding-comparison-data" type="application/json" set:html={JSON.stringify({ hosts: hosts.map(({ arch, shards, runs }) => ({ arch, shards, runs })), levels, recallMin })} />
+<script is:inline>
+  (() => {
+    const data = document.getElementById('embedding-comparison-data');
+    const panel = data?.previousElementSibling;
+    if (!panel || !window.echarts) return;
+
+    const { hosts, levels, recallMin } = JSON.parse(data.textContent);
+    const controls = panel.querySelector('[data-embedding-controls]');
+    const example = panel.querySelector('[data-show-example]');
+    const hostSelect = panel.querySelector('[data-embedding-host]');
+    const effortButtons = [...panel.querySelectorAll('[data-embedding-effort]')];
+    const targets = [...panel.querySelectorAll('[data-embedding-chart]')];
+    for (const target of targets) target.classList.add('is-rendered');
+    const [recall, latency] = targets.map(target => window.echarts.init(target, null, { renderer: 'svg' }));
+    let level = '200';
+    const number = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+    const write = (selector, text) => { panel.querySelector(selector).textContent = text; };
+    const labels = {
+      axisLabel: { color: '#a5aa9f', hideOverlap: true },
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#465044' } },
+    };
+    const base = {
+      animationDuration: 0,
+      animationDurationUpdate: 220,
+      animationEasingUpdate: 'cubicOut',
+      textStyle: { fontFamily: 'Geist Mono, monospace', color: '#f2f2ec', fontSize: 11 },
+      tooltip: {
+        trigger: 'item', confine: true, backgroundColor: '#171b14', borderColor: '#3e4837',
+        textStyle: { color: '#f2f2ec' },
+      },
+    };
+    const gridLines = { lineStyle: { color: '#2a3027' } };
+
+    function render() {
+      const host = hosts.find(host => host.arch === hostSelect.value);
+      const query = host.runs.find(run => run.id === 'mxbai-100k').query[level];
+      write('[data-mixedbread-recall]', `${(query.r10 * 100).toFixed(2)}%`);
+      write('[data-mixedbread-p50]', `${number.format(query.p50)} ms`);
+      write('[data-mixedbread-p99]', `${number.format(query.p99)} ms`);
+      write('[data-embedding-level]', `l_search ${level}`);
+      write('[data-embedding-shards]', `Linux ${host.arch === 'arm64' ? 'ARM64' : host.arch} · ${host.shards} shards · l_search ${level}`);
+      for (const button of effortButtons) button.setAttribute('aria-pressed', String(button.dataset.embeddingEffort === level));
+
+      const latencyMax = Math.ceil(Math.max(...host.runs.flatMap(run => levels.map(l => run.query[l].p99))) / 5) * 5;
+      const animation = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      recall.setOption({
+        ...base,
+        animation,
+        grid: { top: 25, right: 23, bottom: 38, left: 63 },
+        xAxis: { ...labels, type: 'category', data: levels, boundaryGap: false },
+        yAxis: {
+          ...labels, type: 'value', min: recallMin, max: 100, interval: .2, splitLine: gridLines,
+          axisLabel: { ...labels.axisLabel, formatter: value => `${value.toFixed(1)}%` },
+        },
+        tooltip: {
+          ...base.tooltip,
+          trigger: 'axis',
+          formatter: points => [
+            `l_search ${points[0].axisValue}`,
+            ...points.map(point => `${point.marker}${point.seriesName} · ${point.value.toFixed(2)}%`),
+          ].join('<br>'),
+        },
+        series: host.runs.map((run, i) => ({
+          type: 'line', name: run.label, symbol: run.symbol, symbolSize: i === 0 ? 10 : 7,
+          itemStyle: { color: run.color }, lineStyle: { width: i === 0 ? 3 : 1.5 },
+          data: levels.map(l => Number((run.query[l].r10 * 100).toFixed(4))),
+          ...(i === 0 && {
+            markLine: {
+              silent: true, label: { show: false }, symbol: 'none',
+              lineStyle: { type: 'dashed', color: '#7d8b71' }, data: [{ xAxis: level }],
+            },
+          }),
+        })),
+      });
+      latency.setOption({
+        ...base,
+        animation,
+        grid: { top: 10, right: 24, bottom: 16, left: 9, containLabel: true },
+        xAxis: {
+          ...labels, type: 'value', max: latencyMax, splitLine: gridLines,
+          axisLabel: { ...labels.axisLabel, formatter: '{value} ms' },
+        },
+        yAxis: { ...labels, type: 'category', inverse: true, data: host.runs.map(run => run.label) },
+        tooltip: { ...base.tooltip, formatter: point => `${point.name}<br>${point.seriesName} · ${number.format(point.value)} ms` },
+        series: ['p50', 'p99'].map(metric => ({
+          type: 'bar', name: metric, barMaxWidth: 9,
+          data: host.runs.map(run => ({
+            value: run.query[level][metric],
+            itemStyle: { color: run.color, opacity: metric === 'p50' ? .45 : 1 },
+          })),
+        })),
+      });
+    }
+
+    controls.hidden = false;
+    example.hidden = false;
+    example.addEventListener('click', () => {
+      hostSelect.value = hosts[0].arch;
+      level = '800';
+      render();
+    });
+    hostSelect.addEventListener('change', render);
+    for (const button of effortButtons) {
+      button.addEventListener('click', () => { level = button.dataset.embeddingEffort; render(); });
+    }
+    const observer = new ResizeObserver(() => { recall.resize(); latency.resize(); });
+    observer.observe(panel);
+    render();
+  })();
+</script>
+
+<style>
+  .embedding-panel { margin-top: 20px; border: 1px solid var(--rule); background: var(--bg-card); }
+  .comparison-example { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 20px; padding: 16px clamp(12px, 2vw, 26px); border-bottom: 1px solid var(--rule); }
+  .comparison-example h3 { margin: 0 0 6px; font-size: 17px; }
+  .comparison-example p { margin: 0; max-width: 86ch; color: var(--mute); }
+  .comparison-example strong { color: var(--fg); }
+  .embedding-controls:not([hidden]) { display: flex; align-items: end; flex-wrap: wrap; gap: 14px 30px; padding: 16px clamp(12px, 2vw, 26px); }
+  .embedding-controls label, legend { color: var(--mute); font: 11px/1.5 var(--mono); }
+  fieldset { border: 0; padding: 0; margin: 0; }
+  select, .effort-options { display: flex; gap: 6px; margin-top: 5px; }
+  select, button { padding: 9px 11px; min-height: 40px; border: 1px solid var(--rule); background: var(--bg); color: var(--fg); font: 12px var(--mono); }
+  button { cursor: pointer; }
+  button[aria-pressed=true] { color: var(--accent); background: #182010; border-color: #748a48; }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mixedbread { padding: 16px clamp(12px, 2vw, 26px); background: var(--bg-emphasis); border-block: 1px solid #3e4a32; }
+  .mixedbread h3, .comparison-plots h3 { font-size: clamp(18px, 2.2vw, 25px); line-height: 1.15; letter-spacing: -.03em; margin: 0; }
+  .mixedbread p, .comparison-plots p { color: var(--mute); font-size: 13px; margin: .45rem 0 0; }
+  .mixedbread a { display: inline-block; color: var(--accent); margin-left: 9px; }
+  .mixedbread dl { display: flex; align-items: end; flex-wrap: wrap; gap: 10px clamp(18px, 4vw, 55px); margin: 14px 0 0; }
+  dt { color: var(--mute); font: 11px/1.4 var(--mono); }
+  dd { margin: 0; font: clamp(16px, 2vw, 23px)/1.5 var(--mono); }
+  [data-mixedbread-recall] { color: var(--accent); }
+  .comparison-context dd { font-size: 12px; }
+  .comparison-plots { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .85fr); }
+  figure { min-width: 0; margin: 0; padding: clamp(12px, 2vw, 26px); }
+  figure + figure { border-left: 1px solid var(--rule); }
+  .comparison-plot { display: none; }
+  .comparison-plot.is-rendered { display: block; height: 260px; margin-top: 10px; }
+  .dataset-guide { padding: 16px clamp(12px, 2vw, 26px); border-top: 1px solid var(--rule); scroll-margin-top: 20px; }
+  .dataset-guide h3 { margin: 0; font-size: 18px; }
+  .dataset-guide p { color: var(--mute); margin: .4rem 0 0; max-width: 85ch; }
+  .workload-key { list-style: none; margin: 16px 0 0; padding: 0; }
+  .workload-key li { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); align-items: baseline; gap: 6px 16px; padding: 10px; border-left: 2px solid var(--workload-color); background: var(--bg); }
+  .workload-key li + li { margin-top: 6px; }
+  .workload-key a span { color: var(--workload-color); margin-left: 3px; }
+  .workload-key small { display: block; margin-top: 3px; color: var(--mute); font: 11px/1.5 var(--mono); }
+  .workload-key li p { margin: 0; font-size: 13px; }
+  .comparison-values { padding: 0 clamp(12px, 2vw, 26px) 12px; border-top: 1px solid var(--rule); }
+  .comparison-values summary { padding-top: 12px; cursor: pointer; color: var(--mute); font: 12px/1.5 var(--mono); }
+  .comparison-table { overflow-x: auto; margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  caption { color: var(--mute); text-align: left; }
+  td, th { text-align: right; padding: .5rem .6rem; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+  th:first-child { text-align: left; }
+  @media (max-width: 810px) {
+    .comparison-plots { grid-template-columns: minmax(0, 1fr); }
+    figure + figure { border-left: 0; border-top: 1px solid var(--rule); }
+    .workload-key li { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

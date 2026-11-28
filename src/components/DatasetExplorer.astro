@@ -1,0 +1,280 @@
+---
+import report from '~/data/bench/release-0.8.json';
+import { benchmarkDatasets as sources } from '~/lib/benchmark-datasets';
+
+const { hosts } = report.cloud;
+const hardware = {
+  x86_64: 'AMD EPYC Genoa · 16 vCPUs',
+  arm64: 'Arm Neoverse N1 · 8 vCPUs',
+};
+const runs = hosts[0].runs;
+const first = runs[0];
+const levels = ['100', '200', '400', '800'] as const;
+const milliseconds = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+const integer = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
+const initialMax = Math.max(...runs.map(run => run.query['200'].p99));
+const steps = [
+  ['p50', 'p50 latency'],
+  ['p99', 'p99 latency'],
+  ['r10', 'Recall@10'],
+  ['qps', 'Peak throughput'],
+  ['ingest', 'Ingest rate'],
+  ['consolidate', 'Consolidate time'],
+  ['restart', 'Restart to first search'],
+];
+
+const query = first.query['200'];
+const percent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 3 });
+const details = [
+  ['count', 'Vectors', integer.format(first.rows)],
+  ['queries', 'Queries', integer.format(first.queries)],
+  ['recall', 'Recall@10', percent.format(query.r10)],
+  ['latency', 'p50 / p99', `${milliseconds.format(query.p50)} / ${milliseconds.format(query.p99)} ms`],
+  ['qps', 'Peak throughput', `${integer.format(first.qps.best_qps)} QPS · ${first.qps.at} clients`],
+  ['ingest', 'Ingest', `${integer.format(first.build.ingest_rows_s)} rows/s`],
+  ['consolidate', 'Consolidate', `${milliseconds.format(first.build.consolidate_s)} s`],
+  ['restart', 'First search after restart', first.restart ? `${milliseconds.format(first.restart.to_first_search_s)} s` : 'Unavailable'],
+];
+---
+<div class="explorer" data-dataset-explorer>
+  <div class="explorer-controls">
+    <fieldset disabled data-controls>
+      <legend class="explorer-label">Host</legend>
+      <div class="host-options">
+        {hosts.map((host, i) => (
+          <label class="host-option" title={hardware[host.arch as keyof typeof hardware]}>
+            <input type="radio" name="benchmark-host" value={host.arch} checked={i === 0} />
+            <span>{host.arch === 'arm64' ? 'ARM64' : 'x86_64'} <small>{host.shards} shards</small></span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+    <label class="explorer-label">Metric
+      <select data-metric disabled>
+        {steps.map(([id, label]) => <option value={id} selected={id === 'p99'}>{label}</option>)}
+      </select>
+    </label>
+    <label class="explorer-label">Search breadth
+      <select data-breadth disabled>
+        {levels.map(l => <option value={l} selected={l === '200'}>l_search {l}</option>)}
+      </select>
+    </label>
+  </div>
+
+  <div class="explorer-body">
+    <div class="workloads">
+      <p class="columns explorer-label"><span>Dataset</span><span data-column>p99 latency · ms</span></p>
+      <ul class="workload-list">
+        {runs.map((run, i) => (
+          <li><button type="button" data-dataset={run.dataset} disabled aria-pressed={i === 0}>
+            <span class="workload-name">{sources[run.dataset].label}<small>{integer.format(run.rows)} vectors</small></span>
+            <span class="workload-track" aria-hidden="true"><span style={`--value:${run.query['200'].p99 / initialMax}`}></span></span>
+            <span class="workload-value">{milliseconds.format(run.query['200'].p99)}</span>
+          </button></li>
+        ))}
+      </ul>
+      <p class="explorer-note" data-scale>Scale 0–{milliseconds.format(initialMax)} ms for this host.</p>
+    </div>
+    <aside class="inspector" aria-label="Selected dataset">
+      <p class="explorer-label" data-environment>Linux x86_64 · {hosts[0].shards} shards · TQ2 on disk</p>
+      <p class="explorer-label cpu" data-hardware>{hardware.x86_64}</p>
+      <h3 data-name>{sources[first.dataset].label}</h3>
+      <p class="dataset-note" data-note>{sources[first.dataset].note}</p>
+      <a class="dataset-reference" data-reference href={`#dataset-${first.dataset}`}>Dataset references <span aria-hidden="true">↓</span></a>
+      <dl>
+        {details.map(([id, label, value]) => <div><dt>{label}</dt><dd data-stat={id}>{value}</dd></div>)}
+      </dl>
+      <p class="explorer-note" data-status role="status"></p>
+    </aside>
+  </div>
+  <noscript><p class="explorer-note">Enable JavaScript to change the chart. The tables below list measurements for both hosts.</p></noscript>
+</div>
+
+<section class="corpus" aria-labelledby="datasets-title">
+  <h3 id="datasets-title">Dataset references</h3>
+  <p>Sources describe the corpus or embedding model. The benchmark uses prepared vector exports.</p>
+  <ul>
+    {runs.map(run => (
+      <li id={`dataset-${run.dataset}`}>
+        <div><strong>{sources[run.dataset].label}</strong><code>{run.dataset}</code></div>
+        <div>
+          <p>{sources[run.dataset].note}</p>
+          {sources[run.dataset].links.map(([title, href]) => <a href={href}>{title} <span aria-hidden="true">↗</span></a>)}
+        </div>
+      </li>
+    ))}
+  </ul>
+</section>
+
+<script>
+  import { cloud } from '~/data/bench/release-0.8.json';
+
+  type Breadth = '100' | '200' | '400' | '800';
+  type Run = typeof cloud.hosts[number]['runs'][number];
+
+  const explorer = document.querySelector<HTMLElement>('[data-dataset-explorer]');
+  if (explorer) {
+    const fieldset = explorer.querySelector<HTMLFieldSetElement>('[data-controls]')!;
+    const metric = explorer.querySelector<HTMLSelectElement>('[data-metric]')!;
+    const breadth = explorer.querySelector<HTMLSelectElement>('[data-breadth]')!;
+    const buttons = [...explorer.querySelectorAll<HTMLButtonElement>('button[data-dataset]')];
+    const references = explorer.querySelector<HTMLAnchorElement>('[data-reference]')!;
+    const number = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+    const integer = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
+    const percent = new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 3 });
+    const display = (value: number | null, format = number) => value === null ? 'Unavailable' : format.format(value);
+    const set = (selector: string, value: string) => {
+      explorer.querySelector<HTMLElement>(selector)!.textContent = value;
+    };
+
+    const metrics: Record<string, {
+      unit: string;
+      value: (run: Run, level: Breadth) => number | null;
+      format?: Intl.NumberFormat;
+    }> = {
+      p50: { unit: 'ms', value: (run, level) => run.query[level].p50 },
+      p99: { unit: 'ms', value: (run, level) => run.query[level].p99 },
+      r10: { unit: '%', value: (run, level) => run.query[level].r10, format: percent },
+      qps: { unit: 'QPS', value: run => run.qps.best_qps, format: integer },
+      ingest: { unit: 'rows/s', value: run => run.build.ingest_rows_s, format: integer },
+      consolidate: { unit: 's', value: run => run.build.consolidate_s },
+      restart: { unit: 's', value: run => run.restart?.to_first_search_s ?? null },
+    };
+    let selected = cloud.hosts[0].runs[0].dataset;
+
+    function render() {
+      const hostInput = fieldset.querySelector<HTMLInputElement>('input:checked')!;
+      const arch = hostInput.value;
+      const host = cloud.hosts.find(host => host.arch === arch)!;
+      const level = breadth.value as Breadth;
+      const measure = metrics[metric.value];
+      const values = new Map(host.runs.map(run => [run.dataset, measure.value(run, level)]));
+      const max = metric.value === 'r10' ? 1 : Math.max(0, ...[...values.values()].map(value => value ?? 0));
+      const run = host.runs.find(run => run.dataset === selected) ?? host.runs[0];
+      selected = run.dataset;
+
+      for (const button of buttons) {
+        const id = button.dataset.dataset!;
+        button.closest('li')!.hidden = !values.has(id);
+        button.setAttribute('aria-pressed', String(id === selected));
+        const value = values.get(id) ?? null;
+        button.querySelector('.workload-value')!.textContent = display(value, measure.format);
+        button.querySelector<HTMLElement>('.workload-track span')!.style.setProperty('--value', String(value === null || !max ? 0 : value / max));
+      }
+
+      const source = document.getElementById(`dataset-${selected}`)!;
+      const label = source.querySelector('strong')!.textContent!;
+      const query = run.query[level];
+      const suffix = (value: number, unit: string, format = number) => `${format.format(value)} ${unit}`;
+      set('[data-environment]', `Linux ${arch === 'arm64' ? 'ARM64' : arch} · ${host.shards} shards · TQ2 on disk`);
+      set('[data-column]', `${metric.selectedOptions[0].text} · ${measure.unit}`);
+      const end = metric.value === 'r10' ? '100%' : `${display(max, measure.format)} ${measure.unit}`;
+      set('[data-scale]', `Scale 0–${end} for this host.`);
+      set('[data-hardware]', hostInput.parentElement!.title);
+      set('[data-name]', label);
+      set('[data-note]', source.querySelector('p')!.textContent!);
+      references.href = `#dataset-${selected}`;
+      set('[data-stat=count]', integer.format(run.rows));
+      set('[data-stat=queries]', integer.format(run.queries));
+      set('[data-stat=recall]', percent.format(query.r10));
+      set('[data-stat=latency]', `${number.format(query.p50)} / ${suffix(query.p99, 'ms')}`);
+      set('[data-stat=qps]', `${suffix(run.qps.best_qps, 'QPS', integer)} · ${run.qps.at} clients`);
+      set('[data-stat=ingest]', suffix(run.build.ingest_rows_s, 'rows/s', integer));
+      set('[data-stat=consolidate]', suffix(run.build.consolidate_s, 's'));
+      set('[data-stat=restart]', run.restart ? suffix(run.restart.to_first_search_s, 's') : 'Unavailable');
+      set('[data-status]', `Search measurements shown at l_search ${level}.`);
+    }
+
+    fieldset.disabled = false;
+    metric.disabled = false;
+    breadth.disabled = false;
+    fieldset.addEventListener('change', render);
+    metric.addEventListener('change', render);
+    breadth.addEventListener('change', render);
+    for (const button of buttons) {
+      button.disabled = false;
+      button.addEventListener('click', () => {
+        selected = button.dataset.dataset!;
+        render();
+      });
+    }
+    render();
+  }
+</script>
+
+<style>
+  .explorer { margin-top: 20px; border: 1px solid var(--rule); background: var(--bg-card); }
+  .explorer-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px 24px; padding: 20px; border-bottom: 1px solid var(--rule); }
+  .explorer-controls fieldset { border: 0; margin: 0 auto 0 0; min-width: 0; padding: 0; }
+  .explorer-label { display: block; margin: 0; color: var(--mute); font: 11px/1.4 var(--mono); }
+  .host-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .host-option { position: relative; cursor: pointer; font: 12px/1.4 var(--mono); }
+  .host-option input { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .host-option span, select { display: block; padding: 10px 12px; background: var(--bg); border: 1px solid var(--rule); color: var(--fg); }
+  .host-option input:checked + span { color: var(--accent); border-color: #748a48; background: #182010; }
+  .host-option input:focus-visible + span, select:focus-visible, .workload-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .host-option small { color: var(--mute); }
+  select { margin-top: 6px; width: 100%; min-width: 0; font: 12px/1.4 var(--mono); }
+  select:disabled { opacity: .65; }
+  .explorer-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(255px, 2fr); }
+  .workloads { min-width: 0; padding: 20px; }
+  .columns { display: flex; justify-content: space-between; gap: .6rem; margin-bottom: 12px; }
+  .workload-list, .corpus ul { list-style: none; padding: 0; margin: 0; }
+  .workload-list li + li { margin-top: 3px; }
+  .workload-list button {
+    display: grid;
+    grid-template-columns: minmax(104px, .8fr) minmax(10px, 1fr) minmax(3.6em, auto);
+    align-items: center;
+    gap: .6em;
+    width: 100%;
+    padding: 9px 8px;
+    min-height: 44px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg);
+    font: 13px/1.3 var(--sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .workload-list button:hover { background: #181b16; }
+  .workload-list button[aria-pressed=true] { background: #182010; border-color: #435832; }
+  .workload-name small { display: block; color: var(--mute); font: 10px/1.5 var(--mono); }
+  .workload-value { text-align: right; font-family: var(--mono); }
+  .workload-track { height: 10px; background: #232921; }
+  .workload-track span { display: block; height: 100%; width: 100%; background: #738661; transform: scaleX(var(--value)); transform-origin: left; }
+  @media (prefers-reduced-motion: no-preference) {
+    .workload-track span { transition: transform 220ms ease-out; }
+  }
+  button[aria-pressed=true] .workload-track span { background: var(--accent); }
+  .inspector { padding: clamp(17px, 3vw, 32px); background: var(--bg-emphasis); border-left: 1px solid var(--rule); }
+  .cpu { margin-top: .25rem; }
+  .inspector h3 { margin: .7rem 0 .55rem; font-size: clamp(23px, 3.1vw, 42px); line-height: 1; letter-spacing: -.045em; }
+  .dataset-note { margin: 0 0 .62rem; color: var(--mute); }
+  .dataset-reference { color: var(--accent); font: 11px/1.5 var(--mono); }
+  .inspector dl { margin: 20px 0 0; border-top: 1px solid var(--rule); }
+  .inspector dl div { display: flex; justify-content: space-between; gap: 1rem; padding-block: 8px; border-bottom: 1px solid var(--rule); }
+  .inspector dt { color: var(--mute); }
+  .inspector dd { margin: 0; font: 12px/1.5 var(--mono); text-align: right; }
+  .explorer-note { color: var(--mute); font-size: 12px; margin: 12px 0 0; }
+  noscript p { padding: 0 20px 20px; }
+  .corpus { margin-block: 36px 20px; }
+  .corpus h3 { margin: 0; font-size: 27px; letter-spacing: -.025em; }
+  .corpus p { margin: .35rem 0; color: var(--mute); }
+  .corpus ul { margin-top: 16px; }
+  .corpus li { display: grid; grid-template-columns: minmax(132px, 1fr) minmax(0, 2fr); gap: 8px 20px; padding: 12px 0; border-top: 1px solid var(--border); scroll-margin-top: 16px; }
+  .corpus li:target strong { color: var(--accent); }
+  .corpus strong, .corpus code { display: block; }
+  .corpus code { font: 11px/1.5 var(--mono); color: var(--mute); overflow-wrap: anywhere; }
+  .corpus li p { margin: 0; }
+  .corpus li a { display: inline-block; margin-right: 1rem; font-size: 12px; }
+  @media (max-width: 760px) {
+    .explorer-body { grid-template-columns: minmax(0, 1fr); }
+    .inspector { border-left: 0; border-top: 1px solid var(--rule); }
+  }
+  @media (max-width: 450px) {
+    .explorer-controls, .workloads { padding: 12px; }
+    .explorer-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .explorer-controls fieldset { grid-column: 1 / -1; }
+    .corpus li { grid-template-columns: 1fr; }
+  }
+</style>

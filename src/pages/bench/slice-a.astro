@@ -121,11 +121,9 @@ const fmtInt = (v: any) => (v == null || isNaN(v)) ? '-' : Math.round(v).toStrin
     <div class="bench-section-head">
       <h2>RSS at steady state</h2>
       <p class="bench-section-text">
-        Resident memory of the engine process during the query loop. On a
-        personal-AI machine the LLM owns most of the RAM · the vector store
-        should not contend for it. Lower is better, and the gap matters
-        because each MiB the store doesn't use is one the LLM can keep
-        warm.
+        Resident memory of the engine process during the query loop. When the
+        vector store and a local language model share a machine, lower
+        resident memory leaves more room for the model.
       </p>
     </div>
     <div id="chart-rss" data-chart class="bench-chart"></div>

@@ -1,6 +1,11 @@
 {
   "slices": [
     {
+      "id": "release-08",
+      "name": "0.8 November 2026",
+      "available": true
+    },
+    {
       "id": "a",
       "name": "competitive",
       "available": true
