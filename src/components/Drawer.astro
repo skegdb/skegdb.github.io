@@ -119,7 +119,7 @@ const failedDetail = snap?.github?.last_failed_detail;
   )}
 
   <section>
-    <h3>CI history</h3>
+    <h3 data-drawer-heading="actions" tabindex="-1">CI history</h3>
     <ul class="run-list">
       {runs.slice(0, 12).map((r) => (
         <li class={`run run-${r.conclusion ?? 'running'}`}>
@@ -223,6 +223,7 @@ const failedDetail = snap?.github?.last_failed_detail;
   align-items: center;
   gap: 8px;
 }
+[data-drawer-heading] { scroll-margin-top: 22px; }
 .drawer h3 .release-link {
   color: var(--accent);
   text-decoration: none;
@@ -241,7 +242,7 @@ const failedDetail = snap?.github?.last_failed_detail;
 }
 .install-list li {
   display: grid;
-  grid-template-columns: 60px 1fr auto;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -257,6 +258,7 @@ const failedDetail = snap?.github?.last_failed_detail;
   background: var(--bg-pill);
   border-radius: 6px;
   user-select: all;
+  overflow-wrap: anywhere;
 }
 .copy-btn {
   font-family: var(--mono);
@@ -286,7 +288,7 @@ const failedDetail = snap?.github?.last_failed_detail;
   font-family: var(--mono);
   font-size: 12px;
 }
-.asset-name a { color: var(--fg); text-decoration: none; }
+.asset-name a { overflow-wrap: anywhere; color: var(--fg); text-decoration: none; }
 .asset-name a:hover { color: var(--accent); }
 .asset-sha { display: flex; gap: 8px; align-items: center; }
 .sha-label {
@@ -353,6 +355,11 @@ const failedDetail = snap?.github?.last_failed_detail;
   background: color-mix(in srgb, var(--bad) 8%, transparent);
   border-radius: 4px;
   font-size: 12px;
+}
+@media (max-width: 500px) {
+  .run { grid-template-columns: 14px minmax(0, 1fr) auto; }
+  .run-msg { grid-row: 2; grid-column: 2 / -1; }
+  .run-time { display: none; }
 }
 .failed-detail strong { display: block; margin-bottom: 6px; color: var(--bad); }
 .failed-detail ul { list-style: none; padding: 0; margin: 0; }

@@ -1,58 +1,55 @@
 ---
 import '~/styles/global.css';
+import '~/styles/bench.css';
 
 interface Props {
   title?: string;
   description?: string;
+  charts?: boolean;
 }
+
 const {
-  title = 'skegdb · fleet status',
-  description = 'Status of the skegdb ecosystem: releases, packages, CI.',
+  title = 'Skeg releases and Actions',
+  description = 'Latest Skeg releases, downloads, and GitHub Actions results.',
+  charts = false,
 } = Astro.props;
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" class="benchmark-document">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
-  <meta name="theme-color" content="#f6f3ec" id="meta-theme-color" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
-  />
-  <script is:inline>
-    // Apply persisted theme before paint to avoid FOUC. Default = light.
-    (function () {
-      try {
-        var t = localStorage.getItem('skegdb-theme') || 'light';
-        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-        var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', t === 'dark' ? '#14130f' : '#f6f3ec');
-      } catch (_) {}
-    })();
-  </script>
+  <meta name="theme-color" content="#0a0a0a" />
+  <link rel="icon" type="image/svg+xml" href="/bench/brand/favicon.svg" />
+  {charts && <script is:inline src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>}
 </head>
-<body>
-  <main>
+<body class="benchmark-body">
+  <a href="#main-content" class="bench-skip">Skip to content</a>
+  <header class="bench-masthead">
+    <div class="bench-masthead-inner">
+      <a href="https://skegdb.com/" aria-label="Skeg website" class="bench-brand">
+        <img src="/bench/brand/skeg-logo.svg" width="132" height="44" alt="Skeg" />
+      </a>
+      <nav aria-label="Site navigation">
+        <slot name="navigation">
+          <a href="/#releases" aria-current="page">Releases</a>
+          <a href="/#actions">Actions</a>
+          <a href="/bench/">Benchmarks</a>
+        </slot>
+      </nav>
+      <a class="bench-outbound" href="https://github.com/skegdb/skeg">GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+  <main class="bench-main bench-width" id="main-content">
     <slot />
   </main>
-  <script is:inline>
-    document.addEventListener('click', function (e) {
-      var btn = e.target.closest && e.target.closest('#theme-toggle');
-      if (!btn) return;
-      var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-      var next = current === 'dark' ? 'light' : 'dark';
-      if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-      else document.documentElement.removeAttribute('data-theme');
-      try { localStorage.setItem('skegdb-theme', next); } catch (_) {}
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', next === 'dark' ? '#14130f' : '#f6f3ec');
-    });
-  </script>
+  <footer class="bench-end bench-width">
+    <a href="https://skegdb.com/">Skeg website <span aria-hidden="true">↗</span></a>
+    <a href="/">Releases &amp; Actions</a>
+    <a href="/bench/">Benchmarks</a>
+    <a href="https://github.com/skegdb/skegdb.github.io">Site source <span aria-hidden="true">↗</span></a>
+  </footer>
 </body>
 </html>

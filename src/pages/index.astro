@@ -1,195 +1,253 @@
 ---
 import Layout from '~/layouts/Layout.astro';
-import PackageCard from '~/components/PackageCard.astro';
 import Drawer from '~/components/Drawer.astro';
-import Timeline from '~/components/Timeline.astro';
-import Mark from '~/components/Mark.astro';
-import ThemeToggle from '~/components/ThemeToggle.astro';
-import { getPackages, getLatestSnapshots, healthStatus } from '~/lib/data';
+import Sparkline from '~/components/Sparkline.astro';
+import { formatBytes, getPackages, getLatestSnapshots, type Run } from '~/lib/data';
 
-const packages = getPackages();
-const latest = getLatestSnapshots();
-const snapshotList = packages.map((p) => latest.get(p.id)).filter(Boolean) as any[];
+const snapshots = getLatestSnapshots();
+const packages = getPackages().map(pkg => ({ pkg, snap: snapshots.get(pkg.id) }));
+const engine = packages.find(({ pkg }) => pkg.id === 'skeg')!;
+const release = engine.snap?.github?.latest_release;
+const assets = release?.assets ?? [];
+const latestSnapshot = [...snapshots.values()].map(snap => snap.ts).sort().at(-1);
+const date = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' });
+const timestamp = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
+const releasesUrl = `https://github.com/${engine.pkg.repo}/releases`;
 
-const buckets = { op: 0, deg: 0, down: 0, unknown: 0 };
-for (const pkg of packages) {
-  buckets[healthStatus(latest.get(pkg.id))]++;
+const targets = [
+  { triple: 'aarch64-apple-darwin', label: 'macOS', arch: 'ARM64' },
+  { triple: 'x86_64-apple-darwin', label: 'macOS', arch: 'x86_64' },
+  { triple: 'aarch64-unknown-linux', label: 'Linux', arch: 'ARM64' },
+  { triple: 'x86_64-unknown-linux', label: 'Linux', arch: 'x86_64' },
+  { triple: 'aarch64-pc-windows', label: 'Windows', arch: 'ARM64' },
+  { triple: 'x86_64-pc-windows', label: 'Windows', arch: 'x86_64' },
+];
+
+function runStatus(run: Run) {
+  const value = run.conclusion ?? run.status;
+  switch (value) {
+    case 'success': return { label: 'Passed', color: 'ok' };
+    case 'failure': return { label: 'Failed', color: 'bad' };
+    case 'timed_out': return { label: 'Timed out', color: 'bad' };
+    case 'startup_failure': return { label: 'Startup failed', color: 'bad' };
+    case 'in_progress': return { label: 'Running', color: 'running' };
+    case 'queued': return { label: 'Queued', color: 'running' };
+    case 'action_required': return { label: 'Action required', color: 'warn' };
+    default: return { label: value.replaceAll('_', ' '), color: 'muted' };
+  }
 }
-const lastTs = snapshotList[0]?.ts;
 
-// Snapshot cron fires at minute 17 each hour. Surface it for the countdown.
-const SNAPSHOT_MINUTE = 17;
+const actions = packages.map(({ pkg, snap }) => {
+  const runs = snap?.github?.runs ?? [];
+  const recent = runs.filter((run, i) =>
+    runs.findIndex(other => (other.workflow ?? other.name) === (run.workflow ?? run.name)) === i
+  );
+  return { pkg, snap, runs, recent, failure: runs.find(run => runStatus(run).color === 'bad') };
+});
 ---
+
 <Layout>
-  <section class="hero">
-    <div class="hero-mark"><Mark size={148} /></div>
-
-    <div class="hero-body">
-      <p class="hero-eyebrow">fleet status</p>
-      <p class="hero-sub">Releases, packages, and CI signal for every vessel in the skegdb ecosystem.</p>
-    </div>
-
-    <div class="hero-actions"><ThemeToggle /></div>
-
-    <div class="hero-stats">
-      <div class="stat">
-        <span class="stat-num ok">{buckets.op}</span>
-        <span class="stat-meta">at sea</span>
+  <section id="releases" aria-labelledby="releases-title">
+    <header class="release-intro">
+      <div>
+        <h1 class="bench-title" id="releases-title">Releases</h1>
+        <p class="bench-intro">Download Skeg and find the published versions of clients, tools, and integrations.</p>
       </div>
-      {buckets.deg > 0 && (
-        <div class="stat">
-          <span class="stat-num warn">{buckets.deg}</span>
-          <span class="stat-meta">choppy</span>
-        </div>
-      )}
-      {buckets.down > 0 && (
-        <div class="stat">
-          <span class="stat-num bad">{buckets.down}</span>
-          <span class="stat-meta">aground</span>
-        </div>
-      )}
-      {buckets.unknown > 0 && (
-        <div class="stat">
-          <span class="stat-num">{buckets.unknown}</span>
-          <span class="stat-meta">silent</span>
-        </div>
-      )}
-      <div class="stat">
-        <span class="stat-num">{packages.length}</span>
-        <span class="stat-meta">vessels</span>
-      </div>
+      {latestSnapshot && <p class="snapshot-time">Snapshot <time datetime={latestSnapshot}>{timestamp.format(new Date(latestSnapshot))} UTC</time></p>}
+    </header>
 
-      <div class="stat refresh-stat" data-snapshot-min={SNAPSHOT_MINUTE} style="margin-left: auto; align-items: flex-end;">
-        <span class="stat-num refresh-num" id="next-refresh-display">--:--</span>
-        <div class="refresh-meta">
-          <span class="stat-meta">next refresh</span>
-          {lastTs && (
-            <span class="stat-last" data-last-ts={lastTs} id="last-sighting-display">
-              last {new Date(lastTs).toISOString().replace('T', ' ').slice(0, 16)} UTC
-            </span>
-          )}
+    <article class="engine-release" aria-labelledby="engine-release-title">
+      <div class="release-focus">
+        <p class="bench-kicker">Skeg engine</p>
+        <h2 id="engine-release-title">{release?.tag ?? 'No release in snapshot'}</h2>
+        {release && <p class="release-date"><time datetime={release.published_at}>{date.format(new Date(release.published_at))}</time></p>}
+        <div class="release-links">
+          <a class="bench-action" href={release?.html_url ?? releasesUrl}>{release ? 'Release notes' : 'Releases on GitHub'} <span aria-hidden="true">↗</span></a>
+          {release && <a href={releasesUrl} class="release-history">Release archive</a>}
         </div>
       </div>
+      <div class="release-downloads">
+        <h3>Downloads</h3>
+        {assets.length ? <ul>
+          {assets.map(asset => {
+            const target = targets.find(target => asset.name.includes(target.triple));
+            return <li>
+              <a href={asset.download_url}><strong>{target?.label ?? asset.name}</strong>{target && <span class="asset-arch">{target.arch}</span>} <span class="download-symbol" aria-hidden="true">↓</span></a>
+              <span class="asset-meta">{formatBytes(asset.size)}{asset.sha256 && <> · SHA-256 available</>}</span>
+            </li>;
+          })}
+        </ul> : <p class="release-date">No downloadable assets in this snapshot.</p>}
+        <button type="button" data-pkg={engine.pkg.id} class="detail-trigger">Install, assets &amp; checksums <span aria-hidden="true">↗</span></button>
+      </div>
+    </article>
+
+    <section class="dashboard-section" aria-labelledby="packages-title">
+      <h2 id="packages-title">Clients, tools, and integrations</h2>
+      <ul class="package-list">
+        {packages.filter(({ pkg }) => pkg.id !== engine.pkg.id).map(({ pkg, snap }) => {
+          const release = snap?.github?.latest_release;
+          const registry = snap?.registries;
+          const pypi = registry?.pypi?.[0];
+          const crate = registry?.crates?.[0];
+          const brew = registry?.brew;
+          const published = pypi
+            ? { label: 'PyPI', version: pypi.version, url: `https://pypi.org/project/${pypi.name}/` }
+            : crate
+              ? { label: 'crates.io', version: crate.max_version, url: `https://crates.io/crates/${crate.name}` }
+              : brew?.version
+                ? { label: 'Homebrew', version: brew.version, url: `https://github.com/${pkg.repo}` }
+                : null;
+          return <li>
+            <div class="package-name"><strong>{pkg.name}</strong><span>{pkg.category}</span></div>
+            <div class="package-links">
+              {release && <a href={release.html_url}>GitHub <span>{release.tag}</span></a>}
+              {published && <a href={published.url}>{published.label} <span>{published.version}</span></a>}
+              {!release && !published && <span class="release-date">No version in this snapshot</span>}
+            </div>
+            <button type="button" data-pkg={pkg.id} class="detail-trigger" aria-label={`Details for ${pkg.name}`}>Details <span aria-hidden="true">↗</span></button>
+          </li>;
+        })}
+      </ul>
+    </section>
+  </section>
+
+  <section id="actions" class="dashboard-section" aria-labelledby="actions-title">
+    <header class="actions-head">
+      <div><h2 id="actions-title">GitHub Actions</h2><p>Latest run per workflow on each repository’s default branch. History shows up to 20 runs, most recent on the right.</p></div>
+    </header>
+    <div class="action-list">
+      {actions.map(({ pkg, snap, recent, runs, failure }) => (
+        <article class="action-row">
+          <div class="package-name">
+            <a href={`https://github.com/${pkg.repo}/actions`}><strong>{pkg.name}</strong> <span aria-hidden="true">↗</span></a>
+            {snap?.github?.default_branch && <code>{snap.github.default_branch}</code>}
+          </div>
+          <div class="action-workflows">
+            {recent.length ? <ul>
+              {recent.map(run => {
+                const status = runStatus(run);
+                return <li><a href={run.html_url}><span>{run.name} <span class="run-number">#{run.run_number}</span></span><span data-status={status.color} class="workflow-status">{status.label}</span></a></li>;
+              })}
+            </ul> : <p>{snap?.github_error ? 'Actions data unavailable' : 'No runs in this snapshot'}</p>}
+          </div>
+          <div class="action-history">
+            {runs.length > 0 && <Sparkline runs={runs} width={148} height={17} />}
+            {failure && <a href={failure.html_url} class="failure-link">Last failed run <span aria-hidden="true">↗</span></a>}
+            <button type="button" data-pkg={pkg.id} data-drawer-section="actions" class="detail-trigger" aria-label={`Workflow history for ${pkg.name}`}>Run history <span aria-hidden="true">↗</span></button>
+          </div>
+        </article>
+      ))}
     </div>
   </section>
 
-  <Timeline snapshots={snapshotList} />
-
-  <section class="grid">
-    {packages.map((pkg) => (
-      <PackageCard pkg={pkg} snap={latest.get(pkg.id)} />
-    ))}
-  </section>
-
-  {packages.map((pkg) => (
-    <Drawer pkg={pkg} snap={latest.get(pkg.id)} />
-  ))}
-
-  <footer class="site-footer">
-    <div>
-      <a href="/bench/">benchmarks</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/skegdb">github.com/skegdb</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/skegdb/skegdb.github.io">source</a>
-    </div>
-    <div>charted hourly · static, no trackers</div>
-  </footer>
-
+  {packages.map(({ pkg, snap }) => <Drawer pkg={pkg} snap={snap} />)}
   <script is:inline>
-    function openDrawer(id) {
-      const dlg = document.getElementById(`drawer-${id}`);
-      if (dlg && typeof dlg.showModal === 'function') {
-        dlg.showModal();
+    (() => {
+      let returnHash = '';
+      function openDrawer(id, section) {
+        const drawer = document.getElementById(`drawer-${id}`);
+        if (!drawer || typeof drawer.showModal !== 'function' || drawer.open) return;
+        returnHash = location.hash === `#${id}` ? '' : location.hash;
+        drawer.showModal();
         history.replaceState(null, '', `#${id}`);
-      }
-    }
-    document.addEventListener('click', (e) => {
-      // Let download chips & explicit no-bubble elements pass through.
-      if (e.target.closest('[data-stop]')) return;
-
-      const card = e.target.closest('.card[data-pkg]');
-      if (card) {
-        e.preventDefault();
-        openDrawer(card.dataset.pkg);
-        return;
-      }
-      const copyBtn = e.target.closest('[data-copy]');
-      if (copyBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const text = copyBtn.dataset.copy;
-        navigator.clipboard?.writeText(text);
-        copyBtn.classList.add('copied');
-        const prev = copyBtn.textContent;
-        if (copyBtn.tagName === 'BUTTON') {
-          copyBtn.textContent = 'copied';
-          setTimeout(() => {
-            copyBtn.textContent = prev;
-            copyBtn.classList.remove('copied');
-          }, 1200);
-        } else {
-          setTimeout(() => copyBtn.classList.remove('copied'), 1200);
+        const heading = drawer.querySelector(`[data-drawer-heading="${section}"]`);
+        if (heading) {
+          heading.focus({ preventScroll: true });
+          heading.scrollIntoView({ block: 'start' });
         }
       }
-    });
 
-    document.querySelectorAll('dialog.drawer').forEach((dlg) => {
-      dlg.addEventListener('click', (e) => {
-        if (e.target === dlg) dlg.close();
+      document.addEventListener('click', async event => {
+        const trigger = event.target.closest('button[data-pkg]');
+        if (trigger) {
+          openDrawer(trigger.dataset.pkg, trigger.dataset.drawerSection);
+          return;
+        }
+        const copy = event.target.closest('button[data-copy]');
+        if (!copy || copy.disabled) return;
+        const label = copy.textContent;
+        copy.disabled = true;
+        try {
+          await navigator.clipboard.writeText(copy.dataset.copy);
+          copy.classList.add('copied');
+          copy.textContent = 'Copied';
+        } catch {
+          copy.textContent = 'Copy failed';
+        }
+        setTimeout(() => {
+          copy.textContent = label;
+          copy.classList.remove('copied');
+          copy.disabled = false;
+        }, 1200);
       });
-      dlg.addEventListener('close', () => {
-        if (location.hash) history.replaceState(null, '', location.pathname);
-      });
-    });
 
-    // Keyboard support for cards (role=button).
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      const card = e.target.closest?.('.card[data-pkg]');
-      if (card) {
-        e.preventDefault();
-        openDrawer(card.dataset.pkg);
+      for (const drawer of document.querySelectorAll('dialog.drawer')) {
+        drawer.addEventListener('click', event => {
+          if (event.target === drawer) drawer.close();
+        });
+        drawer.addEventListener('close', () => {
+          history.replaceState(null, '', location.pathname + location.search + returnHash);
+        });
       }
-    });
-
-    if (location.hash) {
-      const id = location.hash.slice(1);
-      openDrawer(id);
-    }
-
-    // Live countdown to next snapshot. Cron at minute :17 of each hour.
-    const refreshEl = document.getElementById('next-refresh-display');
-    const snapshotMin = parseInt(
-      document.querySelector('.refresh-stat')?.dataset.snapshotMin || '17', 10
-    );
-    function fmtCountdown() {
-      if (!refreshEl) return;
-      const now = new Date();
-      const next = new Date(now);
-      next.setSeconds(0, 0);
-      next.setMinutes(snapshotMin);
-      if (next <= now) next.setHours(next.getHours() + 1);
-      const diff = Math.floor((next - now) / 1000);
-      const m = Math.floor(diff / 60);
-      const s = diff % 60;
-      refreshEl.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    fmtCountdown();
-    setInterval(fmtCountdown, 1000);
-
-    // Auto-reload when countdown elapses + grace period (give the workflow ~3min to commit).
-    function scheduleAutoReload() {
-      const now = new Date();
-      const next = new Date(now);
-      next.setSeconds(0, 0);
-      next.setMinutes(snapshotMin);
-      if (next <= now) next.setHours(next.getHours() + 1);
-      const ms = (next - now) + 3 * 60 * 1000;
-      setTimeout(() => {
-        location.reload();
-      }, ms);
-    }
-    scheduleAutoReload();
+      if (location.hash) openDrawer(location.hash.slice(1));
+    })();
   </script>
 </Layout>
+
+<style>
+  .release-intro { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 16px; }
+  .release-intro h1 { margin-top: 0; }
+  .snapshot-time { color: var(--mute); margin: 0; font: 11px/1.6 var(--mono); }
+  .snapshot-time time { display: block; color: var(--fg); }
+  .engine-release { margin-top: 32px; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); border: 1px solid var(--rule); }
+  .release-focus { padding: clamp(24px, 5vw, 72px); background: var(--bg-emphasis); }
+  .release-focus h2 { font-size: clamp(44px, 7.4vw, 108px); line-height: .95; letter-spacing: -.065em; margin: 18px 0 12px; overflow-wrap: anywhere; }
+  .release-date { color: var(--mute); font: 12px/1.5 var(--mono); }
+  .release-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 26px; }
+  .release-history { color: var(--mute); }
+  .release-downloads { border-left: 1px solid var(--rule); padding: clamp(24px, 4vw, 50px); background: var(--bg-card); }
+  .release-downloads h3 { font-size: 19px; margin: 0 0 16px; letter-spacing: -.025em; }
+  .release-downloads ul, .package-list, .action-workflows ul { padding: 0; margin: 0; list-style: none; }
+  .release-downloads li { border-top: 1px solid var(--rule); padding: 12px 0; }
+  .release-downloads li > a { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; border: 0; }
+  .asset-arch, .asset-meta { color: var(--mute); font: 11px/1.5 var(--mono); }
+  .asset-meta { display: block; margin: 3px 0 0; }
+  .download-symbol { color: var(--accent); margin-left: auto; }
+  .detail-trigger { background: transparent; border: 1px solid var(--rule); padding: 7px 9px; min-height: 34px; color: var(--fg); cursor: pointer; justify-self: end; font: 11px/1.5 var(--mono); }
+  .detail-trigger span { color: var(--accent); }
+  .detail-trigger:hover { border-color: var(--accent); }
+  .release-downloads .detail-trigger { margin-top: 12px; }
+  .dashboard-section { margin-top: clamp(42px, 6vw, 82px); scroll-margin-top: 20px; }
+  .dashboard-section h2 { font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -.045em; margin: 0 0 20px; }
+  .package-list, .action-list { border-top: 1px solid var(--rule); }
+  .package-list li { display: grid; grid-template-columns: minmax(140px,1fr) minmax(0,1.3fr) auto; align-items: center; gap: 14px 24px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+  .package-name { min-width: 0; overflow-wrap: anywhere; }
+  .package-name strong { font-size: 16px; }
+  .package-name > span, .package-name code { display: block; color: var(--mute); font: 11px/1.5 var(--mono); }
+  .package-links { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+  .package-links a { font-size: 13px; }
+  .package-links a span, .run-number { color: var(--mute); font: 11px/1.5 var(--mono); }
+  .actions-head { display: flex; gap: 0 24px; align-items: end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 24px; }
+  .actions-head h2 { margin-bottom: 8px; }
+  .actions-head p, .action-workflows p { color: var(--mute); margin: 0; }
+  .action-row { display: grid; grid-template-columns: minmax(120px,.9fr) minmax(0,1.55fr) minmax(148px,.7fr); gap: 15px 28px; padding: 15px 0; border-bottom: 1px solid var(--rule); }
+  .action-workflows a { min-height: 25px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 0; }
+  .action-workflows li + li { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+  .workflow-status { display: inline-flex; align-items: center; gap: 5px; text-transform: capitalize; white-space: nowrap; color: var(--mute); font: 11px/1.5 var(--mono); }
+  .workflow-status::before { content: ''; width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+  [data-status="ok"] { color: var(--ok); }
+  [data-status="bad"], .failure-link { color: var(--bad); }
+  [data-status="running"] { color: var(--running); }
+  [data-status="warn"] { color: var(--warn); }
+  .action-history { justify-self: end; display: flex; flex-direction: column; align-items: end; gap: 9px; }
+  .failure-link { font-size: 12px; }
+
+  @media (max-width: 720px) {
+    .engine-release { grid-template-columns: 1fr; }
+    .release-downloads { border-left: 0; border-top: 1px solid var(--rule); }
+    .package-list li, .action-row { grid-template-columns: minmax(0,1fr) auto; }
+    .package-links, .action-workflows { grid-column: 1 / -1; grid-row: 2; }
+    .package-list button, .action-history { grid-column: 2; grid-row: 1; }
+    .action-history > :global(svg) { max-width: 112px; }
+  }
+</style>

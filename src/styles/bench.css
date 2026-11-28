@@ -1,0 +1,140 @@
+@font-face {
+  font-family: Geist;
+  src: url('/bench/brand/geist-regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: Geist;
+  src: url('/bench/brand/geist-semibold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/bench/brand/geist-mono.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root.benchmark-document {
+  --bg: #0a0a0a;
+  --bg-card: #101110;
+  --bg-emphasis: #161814;
+  --bg-drawer: #151713;
+  --bg-pill: #191d16;
+  --bg-pill-k: #22271e;
+  --fg: #f2f2ec;
+  --mute: #a5aa9f;
+  --border: #292c27;
+  --rule: #30352d;
+  --accent: #c7ff3d;
+  --sans: Geist, Arial, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+  --bench-pad: clamp(20px, 4.5vw, 72px);
+}
+
+.benchmark-body a:focus-visible,
+.benchmark-body summary:focus-visible,
+.benchmark-body [tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.benchmark-body a:hover { color: var(--accent); }
+.benchmark-body ::selection { background: var(--accent); color: var(--bg); }
+.bench-skip {
+  position: fixed;
+  z-index: 5;
+  inset: 8px auto auto 12px;
+  padding: 10px 14px;
+  color: var(--bg);
+  background: var(--accent);
+  transform: translateY(-150%);
+}
+.bench-skip:focus { transform: none; color: var(--bg); }
+.bench-width, .bench-masthead-inner {
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-inline: var(--bench-pad);
+}
+.bench-masthead { border-bottom: 1px solid var(--border); }
+.bench-masthead-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  min-height: 76px;
+}
+.bench-masthead a { border-bottom: 0; }
+.bench-brand { width: fit-content; line-height: 0; }
+.bench-brand img { width: 132px; height: auto; }
+.bench-masthead nav { display: flex; align-items: center; gap: clamp(14px, 3vw, 38px); }
+.bench-masthead nav a, .bench-outbound { font: 12px/1.5 var(--mono); color: var(--mute); white-space: nowrap; }
+.bench-masthead nav [aria-current], .bench-masthead nav .is-archive { color: var(--accent); }
+.bench-outbound { justify-self: end; }
+.bench-outbound span, .bench-end span { color: var(--accent); }
+main.bench-main { padding-block: clamp(38px, 6vw, 84px) 84px; }
+.bench-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding-block: 28px;
+  border-top: 1px solid var(--border);
+  font: 12px/1.5 var(--mono);
+}
+.bench-end a { color: var(--mute); border: 0; }
+.bench-kicker {
+  margin: 0;
+  color: var(--accent);
+  font: 11px/1.6 var(--mono);
+  letter-spacing: .04em;
+}
+.bench-title {
+  font-size: clamp(43px, 7.6vw, 108px);
+  font-weight: 600;
+  line-height: .98;
+  letter-spacing: -.065em;
+  margin: 16px 0 22px;
+}
+.bench-intro {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--mute);
+  font-size: clamp(16px, 1.7vw, 20px);
+}
+.bench-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  width: fit-content;
+  padding: 11px 16px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+}
+.benchmark-body .bench-action:hover { color: var(--bg); background: #e0ff93; }
+
+@media (max-width: 600px) {
+  .bench-masthead-inner { grid-template-columns: 1fr auto; gap: 0 14px; padding-block: 9px 13px; }
+  .bench-brand img { width: 112px; }
+  .bench-masthead nav { grid-row: 2; grid-column: 1 / -1; margin-top: 5px; }
+  .bench-outbound { grid-row: 1; grid-column: 2; }
+}
+
+.benchmark-document .benchmark-body .bench-main .bench-hero .hero-eyebrow {
+  color: var(--mute);
+  letter-spacing: .04em;
+}
+.benchmark-document .benchmark-body .bench-main .bench-hero h1 {
+  margin-block: 14px 18px;
+  font-size: clamp(38px, 5vw, 72px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.055em;
+}
+.benchmark-document .benchmark-body .bench-main .bench-hero .hero-sub {
+  color: var(--mute);
+  font-size: clamp(15px, 1.6vw, 18px);
+}

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1399" height="444" viewBox="325 128 1399 444" fill="none" role="img" aria-labelledby="logo-title logo-description">
+  <title id="logo-title">SKEG — drakkar logo</title>
+  <desc id="logo-description">Manually reconstructed vector artwork: curved striped sail, dragon-headed longship, three round shields, and custom SKEG lettering with three lime E bars. Transparent background; no bitmap or font dependencies.</desc>
+  <!-- Hand-authored Bézier geometry. Coordinates retain the reference's 2048 × 682 canvas.
+       Each named group is independently editable and available as an animation target.
+       Main ship stroke: 12.5 units; rounded caps and joins. -->
+  <defs>
+    <!-- Hide rails inside the shields without inserting white background shapes. -->
+    <mask id="shield-clearance" maskUnits="userSpaceOnUse" x="350" y="270" width="570" height="280">
+      <path fill="white" d="M350 270H920V550H350Z"/>
+      <g fill="black">
+        <circle cx="530.5" cy="459.5" r="34"/>
+        <circle cx="607.5" cy="459.5" r="34"/>
+        <circle cx="684.5" cy="459.5" r="34"/>
+      </g>
+    </mask>
+  </defs>
+  <g id="ship" stroke="#F2F2EC" stroke-width="12.5" stroke-linecap="round" stroke-linejoin="round">
+    <g id="sail">
+      <path id="mast" d="M590 170.5V202.5"/>
+      <path id="sail-outline" d="M474 203H701C744 256 752 326 723 404C645 384 554 386 478 410C523 345 524 266 474 203Z"/>
+      <path id="sail-stripe-left" d="M550.5 203C595 258 600 326 565 392.5"/>
+      <path id="sail-stripe-right" d="M627 203C669 257 675 325 645.5 391.5"/>
+    </g>
+    <g id="hull">
+      <path id="hull-outline" d="M395.5 377C372 393 361.5 418 368.5 450C377.5 496 414.5 529 459.5 529H760C797 529 827 509 841 478C855 448 848.5 410 835 374"/>
+      <g id="hull-rails" mask="url(#shield-clearance)">
+        <path id="gunwale" d="M395.5 377C386 418 416.5 451.5 457.5 451.5H732C782 451.5 817 413.5 803 361"/>
+        <path id="lower-rail" d="M368.5 431.5C383 469 414.5 490.5 457.5 490.5H734C788 490.5 829 452.5 839 404"/>
+      </g>
+    </g>
+    <g id="dragon-head">
+      <path id="dragon-profile" d="M803 361C795.5 341 798.5 326.5 811 318C802 305.5 796 294 795 281C809 291 822 300 833 300H848C858 300 862.5 304 868 315H888C897 315 899 320 899 328V333C899 337.5 897 339 892 339H872L885 344.5C891 347 892 350.5 889 356.5C886.5 362 885 364 879.5 361.5L867.5 356H841C833.5 353 831.5 355.5 833 365C833.5 368 834 371 835 374"/>
+      <circle id="dragon-eye" cx="850" cy="318" r="4.8" fill="#F2F2EC" stroke="none"/>
+    </g>
+    <g id="shields">
+      <g id="shield-left">
+        <circle cx="530.5" cy="459.5" r="34"/>
+        <circle id="shield-left-boss" cx="530.5" cy="459.5" r="8.6" fill="#F2F2EC" stroke="none"/>
+      </g>
+      <g id="shield-center">
+        <circle cx="607.5" cy="459.5" r="34"/>
+        <circle id="shield-center-boss" cx="607.5" cy="459.5" r="8.6" fill="#F2F2EC" stroke="none"/>
+      </g>
+      <g id="shield-right">
+        <circle cx="684.5" cy="459.5" r="34"/>
+        <circle id="shield-right-boss" cx="684.5" cy="459.5" r="8.6" fill="#F2F2EC" stroke="none"/>
+      </g>
+    </g>
+  </g>
+  <!-- Lettering is drawn as closed outlines, not live text. -->
+  <g id="wordmark" fill="#F2F2EC">
+    <path id="letter-s" d="M1086.5 332.5L1074 349C1056.5 336.5 1038.5 331 1019.5 331C994 331 977 342 977 357.5C977 372 987.5 377.5 1025.5 387C1070 398 1091.5 409 1091.5 435C1091.5 463.5 1065.5 481.5 1027 481.5C994 481.5 965.5 470.5 943 452L957 435C977 451.5 1000.5 460 1027 460C1052 460 1068.5 450 1068.5 435C1068.5 420.5 1057 414 1021.5 405L995 398C966 390 953.5 378 953.5 358.5C953.5 329 981.5 309.5 1019 309.5C1045 309.5 1067 317 1086.5 332.5Z"/>
+    <path id="letter-k" d="M1138 315.5H1160V398.5L1255.5 315.5H1287.5L1208.5 383L1291.5 475H1262L1191 396L1160 422V475H1138Z"/>
+    <g id="letter-e" fill="#C7FF3D">
+      <rect id="e-bar-top" x="1331.5" y="315.5" width="134.5" height="24" rx="2.5"/>
+      <rect id="e-bar-middle" x="1331.5" y="382" width="133" height="24" rx="2.5"/>
+      <rect id="e-bar-bottom" x="1331.5" y="450.5" width="134.5" height="24.5" rx="2.5"/>
+    </g>
+    <path id="letter-g" d="M1668 333L1654.5 349C1638.5 337 1620.5 330.5 1601.5 330.5C1563 330.5 1534 358.5 1534 395C1534 433 1562 460.5 1602.5 460.5C1627 460.5 1649 451.5 1665 438V410H1604.5V389H1684.5Q1687.5 389 1687.5 392V436C1687.5 448.5 1676.5 458 1660 467C1643 476.5 1623.5 482 1601.5 482C1549.5 482 1511 445.5 1511 395.5C1511 346.5 1550 309 1601 309C1628 309 1650 317.5 1668 333Z"/>
+  </g>
+</svg>
